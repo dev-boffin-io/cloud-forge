@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# =========================================================
+# build-bin — Unified Go Builder for cloud-forge Suite
+# Author: Sumit
+# =========================================================
+#
+# Expected project layout:
+#
+#   cloud-forge/
+#   ├── build-bin          ← this script
+#   ├── bin/               ← compiled binaries go here
+#   └── src/
+#       ├── rclone-config/
+#       │   ├── main.go
+#       │   ├── go.mod
+#       │   └── go.sum
+#       ├── sftp-run/
+#       │   ├── main.go
+#       │   ├── go.mod
+#       │   └── go.sum
+#       ├── sftp-ctl/
+#       │   ├── main.go
+#       │   ├── go.mod
+#       │   └── go.sum
+#       └── sftp-mnt/
+#           ├── main.go
+#           ├── go.mod
+#           └── go.sum
+#
+# Each subdirectory is an independent Go module so that external
+# dependencies (e.g. golang.org/x/term) are handled correctly per binary.
+#
+# =========================================================
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+# ==============================
+# COLORS
+# ==============================
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+RED="\033[1;31m"
+BLUE="\033[1;34m"
+CYAN="\033[1;36m"
+MAGENTA="\033[1;35m"
+BOLD="\033[1m"
+NC="\033[0m"
+
+# ==============================
+# CONFIG
+# ==============================
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SRC_DIR="$PROJECT_ROOT/src"
+BIN_DIR="$PROJECT_ROOT/bin"
+
+mkdir -p "$BIN_DIR"
+
+# Fix #1 & #3 — use an ordered array of "binary:src-subdir" pairs instead of
+# an associative array. Associative arrays have undefined iteration order.
+# Each binary maps to its own package directory under src/, which is the
+# correct way to build Go programs that have external dependencies.
+APPS=(
+    "rclone-config:rclone-config"
+    "sftp-run:sftp-run"
+    "sftp-ctl:sftp-ctl"
+    "sftp-mnt:sftp-mnt"
+)
+
+# ==============================
+# DETECT ARCH & OS
+# ==============================
+# Fix #5 — expose GOOS/GOARCH so cross-compilation is possible.
+# Override on the command line: GOOS=linux GOARCH=arm64 ./build-bin
+GOOS="${GOOS:-$(go env GOOS)}"
+GOARCH="${GOARCH:-$(go env GOARCH)}"
+export GOOS GOARCH
+
+echo -e "${BLUE}${BOLD}🚀 Target: ${GOOS}/${GOARCH}${NC}"
+echo -e "${CYAN}📦 Flags: CGO_ENABLED=0 -trimpath -ldflags='-s -w'${NC}"
+echo -e "${MAGENTA}--------------------------------------${NC}"
+
+# ==============================
+# DEPENDENCY CHECK
+# ==============================
+if ! command -v go &>/dev/null; then
+    echo -e "${RED}❌ 'go' not found in PATH. Install Go from https://go.dev/dl/${NC}"
+    exit 1
+fi
+
+# ==============================
+# FILE SIZE HELPER
+# ==============================
+# Fix #6 — stat is portable across Linux and macOS; wc -c has leading-space
+# issues on macOS.
+file_size_bytes() {
+    local f="$1"
+    if stat --version &>/dev/null 2>&1; then
+        # GNU stat (Linux)
+        stat -c '%s' "$f"
+    else
+        # BSD stat (macOS)
+        stat -f '%z' "$f"
+    fi
+}
+
+# ==============================
+# MODULE INIT HELPER
+# ==============================
+# Fix #2 & #4 — each binary lives in its own module directory.
+# If go.mod is missing we initialise it and run tidy with visible output.
+# Fix #7 — module path uses the binary name, not a hardcoded path.
+ensure_module() {
+    local pkg_dir="$1"
+    local bin_name="$2"
+
+    if [[ ! -f "$pkg_dir/go.mod" ]]; then
+        echo -e "   ${BLUE}⚙️  Initializing module for ${bin_name}...${NC}"
+        (
+            cd "$pkg_dir"
+            go mod init "github.com/dev-boffin-io/cloud-forge/${bin_name}"
+        )
+    fi
+
+    # Fix #4 — tidy output is visible so errors are not silently swallowed.
+    echo -e "   ${BLUE}⚙️  Running go mod tidy for ${bin_name}...${NC}"
+    (cd "$pkg_dir" && go mod tidy)
+}
+
+# ==============================
+# BUILD LOOP
+# ==============================
+echo -e "\n${YELLOW}${BOLD}🔨 Starting unified build...${NC}\n"
+
+# Fix #8 — track results for summary table.
+declare -a RESULTS=()   # "OK:binary:size" or "FAIL:binary:-"
+FAILED=0
+PASSED=0
+
+for ENTRY in "${APPS[@]}"; do
+    # Split "binary:subdir" on the colon.
+    BIN_NAME="${ENTRY%%:*}"
+    PKG_SUBDIR="${ENTRY##*:}"
+    PKG_DIR="$SRC_DIR/$PKG_SUBDIR"
+    OUTPUT="$BIN_DIR/$BIN_NAME"
+
+    echo -e "${BLUE}${BOLD}🔨 Building ${BIN_NAME}...${NC}"
+
+    # Fix #1 — source must be a directory (package), not a single .go file.
+    if [[ ! -d "$PKG_DIR" ]]; then
+        echo -e "${YELLOW}⚠️  Skipping ${BIN_NAME} — directory not found: ${PKG_DIR}${NC}"
+        RESULTS+=("SKIP:${BIN_NAME}:-")
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+
+    if [[ ! -f "$PKG_DIR/main.go" ]]; then
+        echo -e "${YELLOW}⚠️  Skipping ${BIN_NAME} — main.go not found in ${PKG_DIR}${NC}"
+        RESULTS+=("SKIP:${BIN_NAME}:-")
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+
+    # Initialise / tidy the module for this binary.
+    ensure_module "$PKG_DIR" "$BIN_NAME"
+
+    # cd into the package dir before building — Go resolves go.mod relative
+    # to the working directory, not the path argument. Without this, Go walks
+    # up to find a module and hits .git at the repo root instead.
+    if (
+        cd "$PKG_DIR"
+        CGO_ENABLED=0 go build \
+            -trimpath \
+            -ldflags="-s -w" \
+            -o "$OUTPUT" \
+            .
+    ); then
+
+        chmod +x "$OUTPUT"
+        BYTES=$(file_size_bytes "$OUTPUT")
+        # Human-readable size via du (portable).
+        SIZE=$(du -h "$OUTPUT" | cut -f1)
+        echo -e "${GREEN}✅ ${BIN_NAME} built successfully${NC}"
+        echo -e "   📦 Location : ${BOLD}${OUTPUT}${NC}"
+        echo -e "   📊 Size     : ${SIZE} (${BYTES} bytes)"
+        RESULTS+=("OK:${BIN_NAME}:${SIZE}")
+        PASSED=$((PASSED + 1))
+    else
+        echo -e "${RED}❌ Build failed: ${BIN_NAME}${NC}"
+        RESULTS+=("FAIL:${BIN_NAME}:-")
+        FAILED=$((FAILED + 1))
+    fi
+
+    echo
+done
+
+# ==============================
+# SUMMARY TABLE — Fix #8
+# ==============================
+echo -e "${MAGENTA}--------------------------------------${NC}"
+echo -e "${BOLD}📋 Build Summary  (${GOOS}/${GOARCH})${NC}"
+echo -e "${MAGENTA}--------------------------------------${NC}"
+
+for ROW in "${RESULTS[@]}"; do
+    STATUS="${ROW%%:*}"
+    REST="${ROW#*:}"
+    BIN_NAME="${REST%%:*}"
+    SIZE="${REST##*:}"
+
+    case "$STATUS" in
+        OK)   echo -e "  ${GREEN}✅ ${BIN_NAME}${NC}  ${CYAN}${SIZE}${NC}" ;;
+        FAIL) echo -e "  ${RED}❌ ${BIN_NAME}${NC}  build error" ;;
+        SKIP) echo -e "  ${YELLOW}⚠️  ${BIN_NAME}${NC}  source not found" ;;
+    esac
+done
+
+echo -e "${MAGENTA}--------------------------------------${NC}"
+echo -e "  Passed : ${GREEN}${BOLD}${PASSED}${NC}"
+echo -e "  Failed : ${RED}${BOLD}${FAILED}${NC}"
+echo -e "${MAGENTA}--------------------------------------${NC}"
+
+if [[ "$FAILED" -gt 0 ]]; then
+    exit 1
+fi
+
+echo -e "\n${GREEN}${BOLD}✅ All binaries built successfully.${NC}"
