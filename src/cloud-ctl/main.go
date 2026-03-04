@@ -62,11 +62,11 @@ func printOK(msg string)    { fmt.Printf("%s✅ %s%s\n", Green, msg, NC) }
 // ─── Usage ────────────────────────────────────────────────────────────────────
 
 func usage() {
-	fmt.Printf("%sUsage:%s sftp-controller {start|stop|restart|status} [remote_name|all]\n", Yellow, NC)
+	fmt.Printf("%sUsage:%s cloud-ctl {start|stop|restart|status} [remote_name|all]\n", Yellow, NC)
 	fmt.Printf("  %sExamples:%s\n", Magenta, NC)
-	fmt.Println("    sftp-controller start  gdrive")
-	fmt.Println("    sftp-controller stop   all")
-	fmt.Println("    sftp-controller status all")
+	fmt.Println("    cloud-ctl start  gdrive")
+	fmt.Println("    cloud-ctl stop   all")
+	fmt.Println("    cloud-ctl status all")
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────

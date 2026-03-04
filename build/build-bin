@@ -62,10 +62,10 @@ mkdir -p "$BIN_DIR"
 # Each binary maps to its own package directory under src/, which is the
 # correct way to build Go programs that have external dependencies.
 APPS=(
-    "rclone-config:rclone-config"
-    "sftp-run:sftp-run"
-    "sftp-ctl:sftp-ctl"
-    "sftp-mnt:sftp-mnt"
+    "cloud-config:cloud-config"
+    "cloud-run:cloud-run"
+    "cloud-ctl:cloud-ctl"
+    "cloud-mnt:cloud-mnt"
 )
 
 # ==============================

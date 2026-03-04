@@ -4,10 +4,10 @@ gui/_internal/
 # Built GUI binary
 
 # Built Go binaries
-bin/rclone-config
-bin/sftp-ctl
-bin/sftp-mnt
-bin/sftp-run
+bin/cloud-config
+bin/cloud-ctl
+bin/cloud-mnt
+bin/cloud-run
 
 # Built lib binaries
 !/lib/
