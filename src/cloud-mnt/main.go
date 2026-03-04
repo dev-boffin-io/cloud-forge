@@ -263,26 +263,26 @@ func isServerRunning(pidFile string) bool {
 // openURL opens a URL with the platform's default handler.
 // #7 — returns an error so callers can report failures.
 func openURL(url string) error {
-    var cmd *exec.Cmd
+	var cmd *exec.Cmd
 
-    switch runtime.GOOS {
-    case "linux":
-        cmd = exec.Command("xdg-open", url)
-    case "darwin":
-        cmd = exec.Command("open", url)
-    case "windows":
-        cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-    default:
-        return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-    }
+	switch runtime.GOOS {
+	case "linux":
+		// Detach from terminal + ensure background execution
+		cmd = exec.Command("xdg-open", url)
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Setpgid: true,
+		}
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
 
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.Stdin = nil
 
-    if err := cmd.Start(); err != nil {
-        return err
-    }
-
-    go cmd.Wait()
-    return nil
+	return cmd.Start()
 }
