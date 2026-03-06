@@ -268,6 +268,189 @@ class OutputBox(QTextEdit):
         self.clear()
 
 
+# ==================== Add Remote Dialog ====================
+
+# Provider list: (Display Name, rclone type, fields)
+# fields: list of (label, key, placeholder, is_password)
+PROVIDERS = [
+    ("Google Drive",         "drive",     [("Client ID (optional)",     "client_id",     "leave blank to use default", False),
+                                            ("Client Secret (optional)", "client_secret", "leave blank to use default", False)]),
+    ("Google Photos",        "googlephotos",[]),
+    ("OneDrive",             "onedrive",  [("Client ID (optional)",     "client_id",     "leave blank to use default", False),
+                                            ("Client Secret (optional)", "client_secret", "leave blank to use default", False)]),
+    ("Dropbox",              "dropbox",   [("Client ID (optional)",     "client_id",     "leave blank to use default", False),
+                                            ("Client Secret (optional)", "client_secret", "leave blank to use default", False)]),
+    ("Amazon S3",            "s3",        [("Access Key ID",            "access_key_id", "AWS access key",              False),
+                                            ("Secret Access Key",        "secret_access_key","AWS secret key",           True),
+                                            ("Region",                   "region",        "e.g. us-east-1",              False),
+                                            ("Endpoint (optional)",      "endpoint",      "for S3-compatible services",  False)]),
+    ("Backblaze B2",         "b2",        [("Account ID",               "account",       "B2 account ID",               False),
+                                            ("Application Key",          "key",           "B2 application key",          True)]),
+    ("SFTP",                 "sftp",      [("Host",                     "host",          "hostname or IP",              False),
+                                            ("Port",                     "port",          "22",                          False),
+                                            ("Username",                 "user",          "ssh username",                False),
+                                            ("Password",                 "pass",          "ssh password",                True),
+                                            ("Key File (optional)",      "key_file",      "path to private key",         False)]),
+    ("FTP",                  "ftp",       [("Host",                     "host",          "hostname or IP",              False),
+                                            ("Port",                     "port",          "21",                          False),
+                                            ("Username",                 "user",          "ftp username",                False),
+                                            ("Password",                 "pass",          "ftp password",                True)]),
+    ("WebDAV",               "webdav",    [("URL",                      "url",           "https://example.com/dav",     False),
+                                            ("Vendor",                   "vendor",        "e.g. nextcloud, owncloud",    False),
+                                            ("Username",                 "user",          "webdav username",             False),
+                                            ("Password",                 "pass",          "webdav password",             True)]),
+    ("pCloud",               "pcloud",    [("Client ID (optional)",     "client_id",     "leave blank to use default",  False)]),
+    ("Mega",                 "mega",      [("Username",                 "user",          "mega email",                  False),
+                                            ("Password",                 "pass",          "mega password",               True)]),
+    ("Box",                  "box",       [("Client ID (optional)",     "client_id",     "leave blank to use default",  False)]),
+    ("Yandex Disk",          "yandex",    [("Client ID (optional)",     "client_id",     "leave blank to use default",  False)]),
+    ("iCloud Drive",         "iclouddrive",[("Apple ID",                "apple_id",      "your Apple ID email",         False),
+                                            ("Password",                 "password",      "Apple ID password",           True)]),
+    ("Cloudflare R2",        "s3",        [("Access Key ID",            "access_key_id", "R2 access key",               False),
+                                            ("Secret Access Key",        "secret_access_key","R2 secret key",            True),
+                                            ("Endpoint",                 "endpoint",      "https://<account>.r2.cloudflarestorage.com", False)]),
+    ("Wasabi",               "s3",        [("Access Key ID",            "access_key_id", "Wasabi access key",           False),
+                                            ("Secret Access Key",        "secret_access_key","Wasabi secret key",        True),
+                                            ("Endpoint",                 "endpoint",      "s3.wasabisys.com",            False)]),
+    ("HTTP (read-only)",     "http",      [("URL",                      "url",           "https://example.com",         False)]),
+    ("Local filesystem",     "local",     []),
+]
+
+PROVIDER_NAMES = [p[0] for p in PROVIDERS]
+
+
+class AddRemoteDialog(QDialog):
+    def __init__(self, rclone_bin, parent=None):
+        super().__init__(parent)
+        self.rclone_bin = rclone_bin
+        self.setWindowTitle("Add New Remote")
+        self.setMinimumSize(560, 460)
+        self._field_widgets = {}
+        self._build_ui()
+
+    def _build_ui(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(14)
+
+        # Remote name
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel("Remote name:"))
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("e.g. gdrive, mybox, work-s3")
+        name_row.addWidget(self.name_edit)
+        root.addLayout(name_row)
+
+        # Provider dropdown
+        prov_row = QHBoxLayout()
+        prov_row.addWidget(QLabel("Provider:     "))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItems(PROVIDER_NAMES)
+        self.provider_combo.currentIndexChanged.connect(self._on_provider_change)
+        prov_row.addWidget(self.provider_combo)
+        root.addLayout(prov_row)
+
+        # Divider
+        div = QFrame(); div.setObjectName("divider")
+        root.addWidget(div)
+
+        # Dynamic fields area
+        self.fields_group = QGroupBox("Provider Settings")
+        self.fields_layout = QFormLayout(self.fields_group)
+        self.fields_layout.setSpacing(10)
+        self.fields_layout.setContentsMargins(12, 14, 12, 10)
+        root.addWidget(self.fields_group)
+
+        # Info label
+        self.info_label = QLabel()
+        self.info_label.setWordWrap(True)
+        self.info_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 13px;")
+        root.addWidget(self.info_label)
+
+        root.addStretch()
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        self.btn_cancel = QPushButton("Cancel")
+        self.btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(self.btn_cancel)
+        self.btn_add = QPushButton("Add Remote")
+        self.btn_add.setObjectName("btn_primary")
+        self.btn_add.clicked.connect(self._do_add)
+        btn_row.addWidget(self.btn_add)
+        root.addLayout(btn_row)
+
+        self._on_provider_change(0)
+
+    def _on_provider_change(self, idx):
+        # Clear existing fields
+        while self.fields_layout.rowCount():
+            self.fields_layout.removeRow(0)
+        self._field_widgets.clear()
+
+        _, rtype, fields = PROVIDERS[idx]
+
+        if not fields:
+            lbl = QLabel("No additional settings required.\nClick 'Add Remote' to continue.")
+            lbl.setStyleSheet(f"color: {DARK['text_dim']};")
+            self.fields_layout.addRow(lbl)
+            if rtype in ("drive", "onedrive", "dropbox", "pcloud", "box", "yandex", "googlephotos"):
+                self.info_label.setText(
+                    "A browser window will open for OAuth authentication after clicking Add Remote."
+                )
+            else:
+                self.info_label.setText("")
+        else:
+            self.info_label.setText("")
+            for label, key, placeholder, is_pass in fields:
+                widget = QLineEdit()
+                widget.setPlaceholderText(placeholder)
+                if is_pass:
+                    widget.setEchoMode(QLineEdit.Password)
+                self.fields_layout.addRow(label + ":", widget)
+                self._field_widgets[key] = widget
+
+    def _do_add(self):
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "Missing name", "Please enter a remote name.")
+            return
+        if not name.replace("-", "").replace("_", "").isalnum():
+            QMessageBox.warning(self, "Invalid name",
+                "Remote name can only contain letters, numbers, hyphens, and underscores.")
+            return
+
+        idx = self.provider_combo.currentIndex()
+        _, rtype, fields = PROVIDERS[idx]
+
+        # Build rclone config create command
+        cmd = [self.rclone_bin, "config", "create", name, rtype]
+        for label, key, placeholder, is_pass in fields:
+            widget = self._field_widgets.get(key)
+            if widget:
+                val = widget.text().strip()
+                if val:
+                    cmd += [key, val]
+
+        self._cmd = cmd
+        self._name = name
+        self._rtype = rtype
+        self._needs_oauth = rtype in (
+            "drive", "onedrive", "dropbox", "pcloud",
+            "box", "yandex", "googlephotos", "iclouddrive"
+        )
+        self.accept()
+
+    def get_result(self):
+        return {
+            "cmd":         self._cmd,
+            "name":        self._name,
+            "rtype":       self._rtype,
+            "needs_oauth": self._needs_oauth,
+        }
+
+
 # ==================== Rename Dialog ====================
 
 class RenameDialog(QDialog):
@@ -484,24 +667,60 @@ class RemoteTab(QWidget):
                 self.table.setItem(row, 1, t_item)
 
     def add_remote(self):
-        term = self._find_terminal()
-        if term:
-            if term == "xterm":
-                cmd = [term, "-fa", "Monospace", "-fs", "24", "-e", f"{self.rclone} config"]
-            else:
-                cmd = [term, "-e", f"{self.rclone} config"]
-            subprocess.Popen(cmd)
-            self.output.append_cmd(f"{self.rclone} config")
+        dlg = AddRemoteDialog(self.rclone, self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        r = dlg.get_result()
+
+        self.output.append_cmd(" ".join(r["cmd"]))
+
+        if r["needs_oauth"]:
+            # OAuth providers need interactive browser — run in terminal
+            oauth_cmd = [self.rclone, "config", "reconnect", r["name"] + ":"]
             self.output.append_line(
-                "[INFO] rclone config opened in terminal. Add your remote there.",
+                f"[INFO] Creating remote '{r['name']}' ...",
                 DARK['warning']
             )
-            # Refresh after 8 seconds
-            QTimer.singleShot(8000, self.refresh_remotes)
+            # First create the remote entry
+            worker = CmdWorker(r["cmd"])
+            worker.done.connect(lambda out, ok, n=r["name"], oc=oauth_cmd:
+                self._after_create_oauth(out, ok, n, oc))
+            worker.start()
         else:
-            self.output.append_err(
-                "[ERROR] No terminal emulator found. Run manually: rclone config"
-            )
+            # Non-OAuth: just run the command directly
+            self._run(r["cmd"], on_done=self._after_add)
+
+    def _after_create_oauth(self, out, ok, name, oauth_cmd):
+        if ok:
+            self.output.append_ok(f"[OK] Remote '{name}' created.")
+            # Now open browser OAuth in terminal
+            term = self._find_terminal()
+            if term:
+                if term == "xterm":
+                    t_cmd = [term, "-fa", "Monospace", "-fs", "20", "-e",
+                             " ".join(oauth_cmd)]
+                else:
+                    t_cmd = [term, "-e", " ".join(oauth_cmd)]
+                subprocess.Popen(t_cmd)
+                self.output.append_line(
+                    "[INFO] Browser authentication opened in terminal.",
+                    DARK['warning']
+                )
+            else:
+                self.output.append_line(
+                    f"[INFO] Run this to authenticate:  {' '.join(oauth_cmd)}",
+                    DARK['warning']
+                )
+            QTimer.singleShot(5000, self.refresh_remotes)
+        else:
+            self.output.append_err(out or "[ERROR] Failed to create remote.")
+
+    def _after_add(self, out, ok):
+        if ok:
+            self.output.append_ok(out or "[OK] Remote added.")
+            QTimer.singleShot(800, self.refresh_remotes)
+        else:
+            self.output.append_err(out or "[ERROR] Failed to add remote.")
 
     def _find_terminal(self):
         for t in ["xterm", "xfce4-terminal", "gnome-terminal", "konsole", "lxterminal"]:
