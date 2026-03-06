@@ -218,9 +218,10 @@ _active_workers = []
 class CmdWorker(QThread):
     done = pyqtSignal(str, bool)  # output, success
 
-    def __init__(self, cmd, parent=None):
+    def __init__(self, cmd, parent=None, timeout=30):
         super().__init__(parent)
         self.cmd = cmd
+        self.timeout = timeout
         _active_workers.append(self)
         self.finished.connect(self._cleanup)
 
@@ -231,7 +232,7 @@ class CmdWorker(QThread):
     def run(self):
         try:
             result = subprocess.run(
-                self.cmd, capture_output=True, text=True, timeout=30
+                self.cmd, capture_output=True, text=True, timeout=self.timeout
             )
             out = result.stdout + result.stderr
             self.done.emit(out.strip(), result.returncode == 0)
@@ -672,48 +673,58 @@ class RemoteTab(QWidget):
             return
         r = dlg.get_result()
 
-        self.output.append_cmd(" ".join(r["cmd"]))
-
         if r["needs_oauth"]:
-            # OAuth providers need interactive browser — run in terminal
-            oauth_cmd = [self.rclone, "config", "reconnect", r["name"] + ":"]
-            self.output.append_line(
-                f"[INFO] Creating remote '{r['name']}' ...",
-                DARK['warning']
-            )
-            # First create the remote entry
-            worker = CmdWorker(r["cmd"])
-            worker.done.connect(lambda out, ok, n=r["name"], oc=oauth_cmd:
-                self._after_create_oauth(out, ok, n, oc))
-            worker.start()
+            self._do_oauth_add(r)
         else:
-            # Non-OAuth: just run the command directly
+            self.output.append_cmd(" ".join(r["cmd"]))
             self._run(r["cmd"], on_done=self._after_add)
 
-    def _after_create_oauth(self, out, ok, name, oauth_cmd):
-        if ok:
-            self.output.append_ok(f"[OK] Remote '{name}' created.")
-            # Now open browser OAuth in terminal
-            term = self._find_terminal()
-            if term:
-                if term == "xterm":
-                    t_cmd = [term, "-fa", "Monospace", "-fs", "20", "-e",
-                             " ".join(oauth_cmd)]
-                else:
-                    t_cmd = [term, "-e", " ".join(oauth_cmd)]
-                subprocess.Popen(t_cmd)
-                self.output.append_line(
-                    "[INFO] Browser authentication opened in terminal.",
-                    DARK['warning']
-                )
-            else:
-                self.output.append_line(
-                    f"[INFO] Run this to authenticate:  {' '.join(oauth_cmd)}",
-                    DARK['warning']
-                )
-            QTimer.singleShot(5000, self.refresh_remotes)
-        else:
-            self.output.append_err(out or "[ERROR] Failed to create remote.")
+    def _do_oauth_add(self, r):
+        name  = r["name"]
+        rtype = r["rtype"]
+
+        # Step 1: create bare entry (non-interactive, no browser)
+        create_cmd = r["cmd"] + ["--non-interactive"]
+        self.output.append_cmd(" ".join(create_cmd))
+        self.output.append_line(
+            f"[INFO] Creating remote entry '{name}'...", DARK['warning']
+        )
+        worker = CmdWorker(create_cmd, timeout=15)
+        worker.done.connect(
+            lambda out, ok, n=name: self._after_create_then_auth(out, ok, n)
+        )
+        worker.start()
+
+    def _after_create_then_auth(self, out, ok, name):
+        self.output.append_ok(f"[OK] Remote entry '{name}' ready.")
+
+        # Step 2: reconnect — pipe "y\n" to stdin so it auto-opens browser
+        auth_cmd = [self.rclone, "config", "reconnect", f"{name}:"]
+        self.output.append_cmd(" ".join(auth_cmd))
+        self.output.append_line(
+            "[INFO] Browser window opening for authentication.\n"
+            "       Complete sign-in, then click Refresh.",
+            DARK['warning']
+        )
+        try:
+            env = os.environ.copy()
+            if "DISPLAY" not in env:
+                env["DISPLAY"] = ":0"
+            proc = subprocess.Popen(
+                auth_cmd,
+                stdin=subprocess.PIPE,
+                env=env,
+                start_new_session=True,
+            )
+            # Answer "y" to "Use web browser?" prompt
+            proc.stdin.write(b"y\n")
+            proc.stdin.flush()
+            proc.stdin.close()
+        except Exception as e:
+            self.output.append_err(f"[ERROR] Could not launch auth: {e}")
+            return
+
+        QTimer.singleShot(3000, self.refresh_remotes)
 
     def _after_add(self, out, ok):
         if ok:
