@@ -3,30 +3,7 @@
 # build-bin — Unified Go Builder for cloud-forge Suite
 # Author: Sumit
 # =========================================================
-#
-# Expected project layout:
-#
-#   cloud-forge/
-#   ├── build-bin          ← this script
-#   ├── bin/               ← compiled binaries go here
-#   └── src/
-#       ├── rclone-config/
-#       │   ├── main.go
-#       │   ├── go.mod
-#       │   └── go.sum
-#       ├── sftp-run/
-#       │   ├── main.go
-#       │   ├── go.mod
-#       │   └── go.sum
-#       ├── sftp-ctl/
-#       │   ├── main.go
-#       │   ├── go.mod
-#       │   └── go.sum
-#       └── sftp-mnt/
-#           ├── main.go
-#           ├── go.mod
-#           └── go.sum
-#
+
 # Each subdirectory is an independent Go module so that external
 # dependencies (e.g. golang.org/x/term) are handled correctly per binary.
 #
@@ -55,6 +32,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SRC_DIR="$PROJECT_ROOT/src"
 BIN_DIR="$PROJECT_ROOT/bin"
 
+rm -rf "$BIN_DIR"
+
 mkdir -p "$BIN_DIR"
 
 # Fix #1 & #3 — use an ordered array of "binary:src-subdir" pairs instead of
@@ -62,10 +41,7 @@ mkdir -p "$BIN_DIR"
 # Each binary maps to its own package directory under src/, which is the
 # correct way to build Go programs that have external dependencies.
 APPS=(
-    "cloud-config:cloud-config"
-    "cloud-run:cloud-run"
-    "cloud-ctl:cloud-ctl"
-    "cloud-mnt:cloud-mnt"
+    "rclone-sftp:rclone-sftp"
 )
 
 # ==============================

@@ -2,12 +2,10 @@
 gui/_internal/
 
 # Built GUI binary
+cloud-forge
 
 # Built Go binaries
-bin/cloud-config
-bin/cloud-ctl
-bin/cloud-mnt
-bin/cloud-run
+bin/rclone-sftp
 
 # Built lib binaries
 !/lib/
