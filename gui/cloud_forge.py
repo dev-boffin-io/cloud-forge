@@ -46,7 +46,7 @@ QMainWindow, QWidget {{
     background-color: {DARK['bg']};
     color: {DARK['text']};
     font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
-    font-size: 22px;
+    font-size: 30px;
 }}
 QTabWidget::pane {{
     border: 1px solid {DARK['border']};
@@ -77,8 +77,8 @@ QPushButton {{
     color: {DARK['text']};
     border: 1px solid {DARK['border']};
     border-radius: 5px;
-    padding: 6px 14px;
-    font-size: 20px;
+    padding: 6px 10px;
+    font-size: 27px;
 }}
 QPushButton:hover {{
     background: {DARK['btn_hover']};
@@ -149,7 +149,7 @@ QHeaderView::section {{
     padding: 6px 10px;
     border: none;
     border-bottom: 1px solid {DARK['border']};
-    font-size: 19px;
+    font-size: 26px;
     letter-spacing: 1px;
     text-transform: uppercase;
 }}
@@ -159,7 +159,7 @@ QGroupBox {{
     border-radius: 6px;
     margin-top: 10px;
     padding-top: 8px;
-    font-size: 19px;
+    font-size: 26px;
     letter-spacing: 1px;
 }}
 QGroupBox::title {{
@@ -188,20 +188,20 @@ QStatusBar {{
     background: {DARK['panel']};
     color: {DARK['text_dim']};
     border-top: 1px solid {DARK['border']};
-    font-size: 19px;
+    font-size: 26px;
 }}
 QDialog {{
     background: {DARK['panel']};
 }}
 QLabel#title {{
     color: {DARK['accent']};
-    font-size: 32px;
+    font-size: 42px;
     font-weight: bold;
     letter-spacing: 2px;
 }}
 QLabel#subtitle {{
     color: {DARK['text_dim']};
-    font-size: 19px;
+    font-size: 26px;
     letter-spacing: 1px;
 }}
 QFrame#divider {{
@@ -248,7 +248,7 @@ class OutputBox(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        self.setFont(QFont("JetBrains Mono", 20))
+        self.setFont(QFont("JetBrains Mono", 26))
         self.setMinimumHeight(160)
 
     def append_line(self, text, color=None):
@@ -365,7 +365,7 @@ class AddRemoteDialog(QDialog):
         # Info label
         self.info_label = QLabel()
         self.info_label.setWordWrap(True)
-        self.info_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 13px;")
+        self.info_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 22px;")
         root.addWidget(self.info_label)
 
         root.addStretch()
@@ -1181,7 +1181,7 @@ class ConfigTab(QWidget):
             "balanced.transfers=8    "
             "max_disk_mb=2048"
         )
-        eg.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 19px;")
+        eg.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 26px;")
         cl.addWidget(eg)
         inp_row = QHBoxLayout()
         self.config_input = QLineEdit()
@@ -1251,8 +1251,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("cloud-forge")
-        self.setMinimumSize(1200, 800)
-        self.resize(1400, 900)
+        self.setMinimumSize(1600, 800)
+        self.resize(1700, 920)
 
         self.rclone_bin = self._find_bin("rclone")
         self.sftp_bin   = self._find_sftp_bin()
@@ -1304,12 +1304,12 @@ class MainWindow(QMainWindow):
         hl.setContentsMargins(20, 0, 20, 0)
 
         logo = QLabel("☁  cloud-forge")
-        logo.setStyleSheet(f"color: {DARK['accent']}; font-size: 30px; font-weight: bold; letter-spacing: 2px;")
+        logo.setStyleSheet(f"color: {DARK['accent']}; font-size: 38px; font-weight: bold; letter-spacing: 2px;")
         hl.addWidget(logo)
         hl.addStretch()
 
         self.status_label = QLabel()
-        self.status_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 19px;")
+        self.status_label.setStyleSheet(f"color: {DARK['text_dim']}; font-size: 26px;")
         hl.addWidget(self.status_label)
 
         main_layout.addWidget(header)
@@ -1343,10 +1343,10 @@ class MainWindow(QMainWindow):
 
         if warnings:
             self.status_label.setText("⚠  " + "  |  ".join(warnings))
-            self.status_label.setStyleSheet(f"color: {DARK['warning']}; font-size: 19px;")
+            self.status_label.setStyleSheet(f"color: {DARK['warning']}; font-size: 26px;")
         else:
             self.status_label.setText("✓  All binaries found")
-            self.status_label.setStyleSheet(f"color: {DARK['accent2']}; font-size: 19px;")
+            self.status_label.setStyleSheet(f"color: {DARK['accent2']}; font-size: 26px;")
 
 
 # ==================== Entrypoint ====================
