@@ -16,6 +16,7 @@ SFTP_BIN="$BIN_DIR/rclone-sftp"
 DIST_BIN="$GUI_DIR/dist/cloud-forge"
 TARGET_BIN="$PROJECT_ROOT/cloud-forge"
 VENV_DIR="$SCRIPT_DIR/.venv-build"
+PYINSTALLER_BIN=""          # set by install_pyinstaller()
 DEPS_SCRIPT="$SCRIPT_DIR/install-deps-gui.sh"
 
 echo "Building Cloud Forge GUI..."
@@ -110,11 +111,26 @@ arm64_preflight() {
 install_pyinstaller() {
     local py_ver
     py_ver="$("$PY_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-    echo "Python $py_ver detected — installing latest compatible PyInstaller..."
-    pip install --quiet pyinstaller
+    echo "Python $py_ver — installing latest compatible PyInstaller..."
+
+    # Force install into the venv regardless of system packages.
+    # --ignore-installed prevents pip from skipping because a system
+    # version is already visible via --system-site-packages.
+    pip install --quiet --ignore-installed         pyinstaller         pyinstaller-hooks-contrib
+
     local installed
     installed="$(pip show pyinstaller 2>/dev/null | grep -i '^Version:' | awk '{print $2}')" || true
     echo "PyInstaller installed: ${installed:-unknown}"
+
+    # Always use the venv binary directly — do not rely on PATH
+    PYINSTALLER_BIN="$VENV_DIR/bin/pyinstaller"
+    if [ ! -x "$PYINSTALLER_BIN" ]; then
+        echo "ERROR: $PYINSTALLER_BIN not found after install."
+        echo "       venv bin contents:"
+        ls -la "$VENV_DIR/bin/" || true
+        exit 1
+    fi
+    echo "PyInstaller binary: $PYINSTALLER_BIN"
 }
 
 # ─── Isolated Virtual Environment ────────────────────────────────────────
@@ -155,7 +171,7 @@ rm -rf "$GUI_DIR/build" \
 # ─── Build ───────────────────────────────────────────────────────────────
 cd "$GUI_DIR"
 
-pyinstaller \
+"$PYINSTALLER_BIN" \
     --onefile \
     --windowed \
     --name cloud-forge \
