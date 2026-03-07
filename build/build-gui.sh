@@ -103,6 +103,20 @@ arm64_preflight() {
     echo "System PyQt5 OK: $VER"
 }
 
+# ─── Resolve compatible PyInstaller version ──────────────────────────────
+# pyinstaller==6.4.0 requires Python <3.13.
+# No version pin — pip automatically picks the highest version
+# compatible with the running Python interpreter.
+install_pyinstaller() {
+    local py_ver
+    py_ver="$("$PY_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    echo "Python $py_ver detected — installing latest compatible PyInstaller..."
+    pip install --quiet pyinstaller
+    local installed
+    installed="$(pip show pyinstaller 2>/dev/null | grep -i '^Version:' | awk '{print $2}')" || true
+    echo "PyInstaller installed: ${installed:-unknown}"
+}
+
 # ─── Isolated Virtual Environment ────────────────────────────────────────
 echo ""
 echo "Setting up isolated build environment..."
@@ -117,7 +131,7 @@ if [ "$IS_ARM64" -eq 1 ]; then
     source "$VENV_DIR/bin/activate"
 
     pip install --quiet --upgrade pip setuptools wheel
-    pip install --quiet pyinstaller==6.4.0
+    install_pyinstaller
 
 else
     # x86_64 — fully isolated, pip wheels available
@@ -125,9 +139,8 @@ else
     source "$VENV_DIR/bin/activate"
 
     pip install --quiet --upgrade pip setuptools wheel
-    pip install --quiet --force-reinstall \
-        pyinstaller==6.4.0 \
-        PyQt5==5.15.10
+    install_pyinstaller
+    pip install --quiet --force-reinstall PyQt5==5.15.10
 fi
 
 echo "Build environment ready."
