@@ -1251,8 +1251,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("cloud-forge")
-        self.setMinimumSize(1600, 800)
-        self.resize(1700, 920)
+        self.setMinimumSize(1900, 800)
+        self.resize(1700, 750)
 
         self.rclone_bin = self._find_bin("rclone")
         self.sftp_bin   = self._find_sftp_bin()
