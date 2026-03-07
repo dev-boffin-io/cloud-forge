@@ -21,7 +21,8 @@ cloud-forge/
 │   └── rclone-sftp          # Compiled Go binary
 ├── build/
 │   ├── build-bin.sh         # Build rclone-sftp (Go)
-│   └── build-gui.sh         # Build cloud-forge GUI (PyInstaller)
+│   ├── build-gui.sh         # Build cloud-forge GUI (PyInstaller, no root required)
+│   └── install-deps-gui.sh  # Install GUI system dependencies (requires sudo)
 ├── gui/
 │   └── cloud_forge.py       # PyQt5 GUI source
 ├── src/
@@ -29,7 +30,7 @@ cloud-forge/
 │       ├── go.mod
 │       └── main.go          # Go CLI source
 ├── cloud-forge              # Compiled GUI binary (after build)
-├── cloud-forge.png          # Application icon
+├── cloud-forge.png          # Application icon (512×512)
 └── install.sh               # Desktop entry installer
 ```
 
@@ -42,12 +43,13 @@ cloud-forge/
 - Linux desktop environment with a file manager that supports `sftp://` URIs (Thunar, Nautilus, Dolphin, etc.)
 
 ### Build
+
 | Tool | Purpose |
 |------|---------|
 | Go 1.21+ | Build `rclone-sftp` CLI |
 | Python 3.9+ | Run or build the GUI |
-| PyQt5 | GUI framework (`pip install PyQt5`) |
-| PyInstaller | Build standalone GUI binary (`pip install pyinstaller`) |
+| PyQt5 | GUI framework |
+| PyInstaller | Build standalone GUI binary |
 
 ---
 
@@ -67,7 +69,7 @@ Installs a desktop entry to `~/.local/share/applications/cloud-forge.desktop`.
 ./install.sh --build
 ```
 
-This runs `build/build-bin.sh` → `build/build-gui.sh` → installs the desktop entry.
+Runs `build/build-bin.sh` → `build/build-gui.sh` → installs the desktop entry.
 
 ### Remove desktop entry
 
@@ -77,9 +79,69 @@ This runs `build/build-bin.sh` → `build/build-gui.sh` → installs the desktop
 
 ---
 
+## Building
+
+### Step 1 — rclone-sftp (Go binary)
+
+```bash
+bash build/build-bin.sh
+# Output: bin/rclone-sftp
+```
+
+### Step 2 — GUI system dependencies (ARM64 / PRoot only)
+
+On ARM64 devices (e.g. Android PRoot, Raspberry Pi), PyQt5 pip wheels are not
+available. System packages must be installed once before building:
+
+```bash
+sudo bash build/install-deps-gui.sh
+```
+
+Supported distributions: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`),
+Arch (`pacman`), openSUSE (`zypper`), Alpine (`apk`).
+
+On x86\_64 the build script handles everything automatically — this step can be skipped.
+
+### Step 3 — cloud-forge GUI (standalone binary via PyInstaller)
+
+```bash
+bash build/build-gui.sh
+# Output: cloud-forge
+```
+
+The build script:
+- Detects the Python interpreter (`python3` or `python`)
+- Creates an isolated virtual environment under `build/.venv-build/`
+- On ARM64: uses `--system-site-packages` to access the system PyQt5, installs only PyInstaller into the venv
+- On x86\_64: installs PyQt5 and PyInstaller from pip, fully isolated
+- Resolves a PyInstaller version compatible with the running Python automatically (no hardcoded version pin)
+- Cleans up the venv after a successful build
+
+> **Note:** Do not run `build-gui.sh` as root. It will refuse to proceed.
+> Run `install-deps-gui.sh` with sudo separately if system packages are needed.
+
+### Both at once
+
+```bash
+./install.sh --build
+```
+
+---
+
+## Running the GUI from source
+
+```bash
+pip install PyQt5
+python3 gui/cloud_forge.py
+```
+
+---
+
 ## rclone-sftp CLI
 
-The `rclone-sftp` binary wraps `rclone serve sftp` with persistent server management: PID tracking, log rotation, metadata persistence across restarts, and three performance profiles.
+The `rclone-sftp` binary wraps `rclone serve sftp` with persistent server
+management: PID tracking, log rotation, metadata persistence across restarts,
+and three performance profiles.
 
 ### Commands
 
@@ -195,7 +257,8 @@ rclone-sftp config balanced.transfers=8
 
 ## Configuration
 
-Configuration is stored at `~/.local/share/rclone-sftp/config.json` and is created automatically on first run.
+Configuration is stored at `~/.local/share/rclone-sftp/config.json` and is
+created automatically on first run.
 
 ### Global keys
 
@@ -241,13 +304,16 @@ All runtime data is stored under `~/.local/share/rclone-sftp/`:
 └── temp/                          # rclone temp files
 ```
 
-Server metadata (profile, start time, user, PID) is persisted to disk so that `status`, `check`, and uptime display correctly after a program restart — even if the underlying rclone process was started in a previous session.
+Server metadata (profile, start time, user, PID) is persisted to disk so that
+`status`, `check`, and uptime display correctly after a program restart — even
+if the underlying rclone process was started in a previous session.
 
 ---
 
 ## cloud-forge GUI
 
-The desktop GUI provides a graphical interface for all `rclone` and `rclone-sftp` operations.
+The desktop GUI provides a graphical interface for all `rclone` and
+`rclone-sftp` operations.
 
 ### Remote Manager tab
 
@@ -275,11 +341,13 @@ The desktop GUI provides a graphical interface for all `rclone` and `rclone-sftp
 | Profiles | `rclone-sftp profiles` |
 | Open in Files | Opens `sftp://user@127.0.0.1:<port>/` in the system file manager |
 
-The server table auto-refreshes every 5 seconds. Running servers are highlighted in green, stopped servers in red.
+The server table auto-refreshes every 5 seconds. Running servers are
+highlighted in green, stopped servers in red.
 
 ### Config tab
 
-Set the default profile and apply custom `key=value` configuration directly from the GUI.
+Set the default profile and apply custom `key=value` configuration directly
+from the GUI.
 
 ### Binary discovery
 
@@ -290,40 +358,6 @@ The GUI locates `rclone-sftp` in this order:
 3. `/usr/local/bin/rclone-sftp`
 4. `/usr/bin/rclone-sftp`
 5. `PATH`
-
----
-
-## Running the GUI from source
-
-```bash
-pip install PyQt5
-python3 gui/cloud_forge.py
-```
-
----
-
-## Building
-
-### rclone-sftp (Go binary)
-
-```bash
-bash build/build-bin.sh
-# Output: bin/rclone-sftp
-```
-
-### cloud-forge GUI (standalone binary via PyInstaller)
-
-```bash
-pip install pyinstaller PyQt5
-bash build/build-gui.sh
-# Output: cloud-forge
-```
-
-### Both at once
-
-```bash
-./install.sh --build
-```
 
 ---
 
@@ -339,7 +373,8 @@ bash build/build-gui.sh
 
 ## Signal Handling
 
-`rclone-sftp` handles `SIGINT` and `SIGTERM` gracefully — on receipt it stops all running servers before exiting.
+`rclone-sftp` handles `SIGINT` and `SIGTERM` gracefully — on receipt it stops
+all running servers before exiting.
 
 ---
 
