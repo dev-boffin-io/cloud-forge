@@ -361,6 +361,67 @@ The GUI locates `rclone-sftp` in this order:
 
 ---
 
+## Connecting via CLI (Without File Manager)
+
+You can connect to the SFTP server using standard CLI tools like `sftp`, `scp`, or `rsync` since the server runs locally on `127.0.0.1:<port>`. No additional setup is needed beyond starting the server with `rclone-sftp start`.
+
+### Instructions for Connecting with `sftp`
+
+1. Start the SFTP server (as shown in examples above), e.g.:
+   ```bash
+   rclone-sftp start gdrive 8888 sumit mypassword
+   ```
+
+2. Connect using the `sftp` command:
+   ```bash
+   sftp -P 8888 sumit@127.0.0.1
+   ```
+   - `-P <port>`: Specify the port (e.g., 8888).
+   - `sumit`: The username you set when starting the server.
+   - Enter the password when prompted (or use key-based auth if configured).
+   
+   Once connected, you'll be in an interactive SFTP shell where you can use commands like `ls`, `cd`, `get`, `put`, etc.
+
+### Examples for File Copy/Send
+
+#### Using `sftp` (Interactive Mode)
+- Upload a local file to the remote (cloud storage):
+  ```bash
+  sftp> put /path/to/local/file.txt /remote/path/
+  ```
+- Download a file from the remote:
+  ```bash
+  sftp> get /remote/path/file.txt /path/to/local/
+  ```
+- Exit the session:
+  ```bash
+  sftp> bye
+  ```
+
+#### Using `scp` (Non-Interactive Copy)
+- Upload a file:
+  ```bash
+  scp -P 8888 /path/to/local/file.txt sumit@127.0.0.1:/remote/path/
+  ```
+- Download a file:
+  ```bash
+  scp -P 8888 sumit@127.0.0.1:/remote/path/file.txt /path/to/local/
+  ```
+
+#### Using `rsync` (For Syncing Directories)
+- Sync a local directory to remote:
+  ```bash
+  rsync -avz -e "ssh -p 8888" /path/to/local/dir/ sumit@127.0.0.1:/remote/path/
+  ```
+- Sync from remote to local:
+  ```bash
+  rsync -avz -e "ssh -p 8888" sumit@127.0.0.1:/remote/path/ /path/to/local/dir/
+  ```
+
+> **Note:** For password-less access, generate SSH keys and add the public key to the server's authorized_keys (via rclone config if needed). These tools require OpenSSH or equivalent installed.
+
+---
+
 ## Environment Variables
 
 | Variable | Description |
