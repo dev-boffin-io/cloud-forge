@@ -85,7 +85,7 @@ do_desktop_entry() {
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=cloud-forge
+Name=Cloud Forge
 Comment=rclone Cloud Storage & SFTP Server Manager
 Exec=$GUI_BIN
 Icon=$ICON
