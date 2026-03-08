@@ -19,11 +19,11 @@ import (
 	"time"
 )
 
-// ==================== ভার্সন ====================
+// ==================== VERSION ====================
 
 const VERSION = "1.0.0"
 
-// ==================== কনফিগ স্ট্রাকচার ====================
+// ==================== CONFIG STRUCTURE ====================
 
 type LightProfileConfig struct {
 	BufferSize      string `json:"buffer_size"`
@@ -101,7 +101,7 @@ type Config struct {
 	Verbose       bool `json:"verbose"`
 }
 
-// ==================== সার্ভার টাইপ ====================
+// ==================== SERVER TYPE ====================
 
 type ServerStatus struct {
 	Remote        string `json:"remote"`
@@ -117,7 +117,7 @@ type ServerStatus struct {
 	TransferSpeed string `json:"transfer_speed"`
 }
 
-// ServerMeta — ডিস্কে persist হওয়া তথ্য (program restart-এর পরেও টিকে থাকে)
+// ServerMeta — data persisted to disk (survives program restart)
 type ServerMeta struct {
 	Remote    string    `json:"remote"`
 	Port      string    `json:"port"`
@@ -149,7 +149,7 @@ func (s *ServerInfo) stopRotator() {
 	}
 }
 
-// ==================== গ্লোবাল ভেরিয়েবল ====================
+// ==================== GLOBAL VARIABLES ====================
 
 var (
 	baseDir      string
@@ -162,7 +162,7 @@ var (
 	logger       = log.New(os.Stdout, "", log.LstdFlags)
 )
 
-// ==================== ইনিট ====================
+// ==================== INIT ====================
 
 func init() {
 	home, err := os.UserHomeDir()
@@ -186,14 +186,14 @@ func init() {
 	startCacheSizeUpdater()
 }
 
-// ==================== ডিরেক্টরি হেল্পার ====================
+// ==================== DIRECTORY HELPERS ====================
 
 func logsDir() string  { return filepath.Join(baseDir, "logs") }
 func cacheDir() string { return filepath.Join(baseDir, "cache") }
 func tempDir() string  { return filepath.Join(baseDir, "temp") }
 func metaDir() string  { return filepath.Join(baseDir, "meta") }
 
-// ==================== কনফিগ ====================
+// ==================== CONFIG ====================
 
 func loadConfig() {
 	configMu.Lock()
@@ -284,7 +284,7 @@ func defaultConfig() Config {
 	}
 }
 
-// ==================== সার্ভার মেটা (ডিস্ক persist) ====================
+// ==================== SERVER META (disk persist) ====================
 
 func metaFile(remote, port string) string {
 	return filepath.Join(metaDir(), fmt.Sprintf("%s_%s.json", remote, port))
@@ -329,7 +329,7 @@ func loadAllMeta() {
 	}
 }
 
-// ==================== ইউটিলিটি ====================
+// ==================== UTILITIES ====================
 
 func serverKey(remote, port string) string { return remote + ":" + port }
 
@@ -383,15 +383,15 @@ func getPassword(pass, passwordFile string) (string, error) {
 	}
 }
 
-// ==================== ক্যাশ সাইজ (background update) ====================
+// ==================== CACHE SIZE (background update) ====================
 
 var (
 	cachedCacheSize    int64
 	cacheSizeMu        sync.RWMutex
 )
 
-// init()-এ একবার call হয়, তারপর প্রতি ৫ মিনিটে update করে।
-// প্রতিবার full walk না করে cached value ফেরত দেয়।
+// Called once in init(), then updates every 5 minutes.
+// Returns cached value instead of doing a full walk each time.
 func startCacheSizeUpdater() {
 	update := func() {
 		var total int64
@@ -406,7 +406,7 @@ func startCacheSizeUpdater() {
 		cacheSizeMu.Unlock()
 	}
 
-	update() // প্রথমবার সাথে সাথে
+	update() // run immediately on first call
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -422,6 +422,27 @@ func calcCacheSize() int64 {
 	return cachedCacheSize
 }
 
+func formatBytes(b int64) string {
+	const (
+		KB = int64(1024)
+		MB = 1024 * KB
+		GB = 1024 * MB
+		TB = 1024 * GB
+	)
+	switch {
+	case b < KB:
+		return fmt.Sprintf("%d B", b)
+	case b < MB:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(KB))
+	case b < GB:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(MB))
+	case b < TB:
+		return fmt.Sprintf("%.2f GB", float64(b)/float64(GB))
+	default:
+		return fmt.Sprintf("%.2f TB", float64(b)/float64(TB))
+	}
+}
+
 func profileDescription(profile string) string {
 	switch profile {
 	case "light":
@@ -433,7 +454,7 @@ func profileDescription(profile string) string {
 	}
 }
 
-// ==================== rclone আর্গুমেন্ট বিল্ড ====================
+// ==================== RCLONE ARGUMENT BUILD ====================
 
 func buildArgs(remote, port, user, pass, profile string) []string {
 	args := []string{
@@ -469,7 +490,7 @@ func buildArgs(remote, port, user, pass, profile string) []string {
 			"--timeout", p.Timeout,
 			"--contimeout", p.Contimeout,
 			"--low-level-retries", strconv.Itoa(p.LowLevelRetries),
-			"--max-connections", strconv.Itoa(p.MaxConnections), // BUG FIX: আগে missing ছিল
+			"--max-connections", strconv.Itoa(p.MaxConnections),
 		)
 	default: // balanced
 		p := config.BalancedProfile
@@ -511,10 +532,10 @@ func buildArgs(remote, port, user, pass, profile string) []string {
 	return args
 }
 
-// ==================== সার্ভার স্টার্ট ====================
+// ==================== SERVER START ====================
 
 func startServer(remote, port, user, pass, passwordFile, profile string) {
-	// ডিস্ক স্পেস চেক
+	// Check available disk space
 	if config.MaxDiskMB > 0 {
 		var stat syscall.Statfs_t
 		if err := syscall.Statfs(baseDir, &stat); err == nil {
@@ -525,7 +546,7 @@ func startServer(remote, port, user, pass, passwordFile, profile string) {
 		}
 	}
 
-	// পোর্ট অটো-অ্যাসাইন
+	// Auto-assign port
 	if port == "auto" {
 		p := findFreePort()
 		if p == 0 {
@@ -540,7 +561,7 @@ func startServer(remote, port, user, pass, passwordFile, profile string) {
 		logger.Fatal("[ERROR] ", err)
 	}
 
-	// PID চেক — আগে থেকে চলছে কিনা
+	// PID check — already running?
 	pidFile := filepath.Join(baseDir, fmt.Sprintf("%s_%s.pid", remote, port))
 	if data, err := os.ReadFile(pidFile); err == nil {
 		if pid, _ := strconv.Atoi(strings.TrimSpace(string(data))); isProcessAlive(pid) {
@@ -549,7 +570,7 @@ func startServer(remote, port, user, pass, passwordFile, profile string) {
 		os.Remove(pidFile)
 	}
 
-	// লগ ফাইল
+	// Log file
 	logFile := filepath.Join(config.LogDir, fmt.Sprintf("%s_%s.log", remote, port))
 	logF, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -562,7 +583,7 @@ func startServer(remote, port, user, pass, passwordFile, profile string) {
 	fmt.Fprintf(logF, "Remote: %s, Port: %s, User: %s, Profile: %s\n", remote, port, user, profile)
 	fmt.Fprintf(logF, "Cache dir: %s\n", config.CacheDir)
 
-	// rclone প্রসেস
+	// rclone process
 	args := buildArgs(remote, port, user, finalPass, profile)
 	cmd := exec.Command(rcloneBin, args...)
 	cmd.Stdout = logF
@@ -578,13 +599,13 @@ func startServer(remote, port, user, pass, passwordFile, profile string) {
 	pid := cmd.Process.Pid
 	fmt.Fprintf(logF, "PID: %d\n", pid)
 
-	// PID ফাইল লিখি
+	// Write PID file
 	os.WriteFile(pidFile, []byte(strconv.Itoa(pid)), 0644)
 
-	// প্রসেস ডিট্যাচ
+	// Detach process
 	cmd.Process.Release()
 
-	// in-memory + disk meta সেভ
+	// Save in-memory + disk meta
 	si := &ServerInfo{
 		ServerMeta: ServerMeta{
 			Remote:    remote,
@@ -605,16 +626,16 @@ func startServer(remote, port, user, pass, passwordFile, profile string) {
 	servers[key] = si
 	serversMu.Unlock()
 
-	saveMeta(si) // BUG FIX: ডিস্কে persist করি
+	saveMeta(si)
 
-	go startLogRotator(logFile, si.logRotateStop) // BUG FIX: si সরাসরি ব্যবহার
+	go startLogRotator(logFile, si.logRotateStop)
 
 	fmt.Printf("[OK] Server started: %s:%s (PID: %d)\n", remote, port, pid)
 	fmt.Printf("[INFO] Profile: %s\n", profile)
 	fmt.Printf("[INFO] Log file: %s\n", logFile)
 }
 
-// ==================== সার্ভার স্টপ ====================
+// ==================== SERVER STOP ====================
 
 func stopServer(remote, port string, silent bool) bool {
 	pidFile := filepath.Join(baseDir, fmt.Sprintf("%s_%s.pid", remote, port))
@@ -632,9 +653,9 @@ func stopServer(remote, port string, silent bool) bool {
 		os.Remove(pidFile)
 		deleteMeta(remote, port)
 
-		// stopRotator() নিজেও s.mu.Lock() নেয়।
-		// serversMu ধরা অবস্থায় ডাকলে lock ordering সমস্যা হতে পারে।
-		// তাই আগে map থেকে বের করি, তারপর lock ছেড়ে stopRotator ডাকি।
+		// stopRotator() acquires s.mu.Lock() internally.
+		// Calling it while holding serversMu could cause lock ordering issues.
+		// So remove from map first, then release serversMu before calling stopRotator.
 		key := serverKey(remote, port)
 		serversMu.Lock()
 		si, exists := servers[key]
@@ -644,7 +665,7 @@ func stopServer(remote, port string, silent bool) bool {
 		serversMu.Unlock()
 
 		if exists {
-			si.stopRotator() // lock-এর বাইরে
+			si.stopRotator() // called outside serversMu
 		}
 	}
 
@@ -692,7 +713,7 @@ func stopAllServers() {
 	fmt.Printf("[INFO] Stopping %d servers...\n", len(files))
 	for _, file := range files {
 		name := strings.TrimSuffix(filepath.Base(file), ".pid")
-		remote, port, ok := splitRemotePort(name) // BUG FIX: LastIndex দিয়ে split
+		remote, port, ok := splitRemotePort(name)
 		if ok {
 			stopServer(remote, port, true)
 		}
@@ -700,7 +721,7 @@ func stopAllServers() {
 	fmt.Println("[OK] All servers stopped")
 }
 
-// ==================== স্ট্যাটাস ====================
+// ==================== STATUS ====================
 
 func showStatus(jsonOutput bool) {
 	files, _ := filepath.Glob(filepath.Join(config.LogDir, "*.log"))
@@ -708,7 +729,7 @@ func showStatus(jsonOutput bool) {
 
 	for _, file := range files {
 		name := strings.TrimSuffix(filepath.Base(file), ".log")
-		remote, port, ok := splitRemotePort(name) // BUG FIX: LastIndex দিয়ে split
+		remote, port, ok := splitRemotePort(name)
 		if !ok {
 			continue
 		}
@@ -721,7 +742,7 @@ func showStatus(jsonOutput bool) {
 		logInfo, _ := os.Stat(file)
 		rotated, _ := filepath.Glob(file + ".*.gz")
 
-		// BUG FIX: pid==0 হলে "running" দেখানো যাবে না
+		// skip ghost entries with no valid pid
 		if pid <= 0 {
 			continue
 		}
@@ -744,13 +765,13 @@ func showStatus(jsonOutput bool) {
 				st.Profile = s.Profile
 				if s.bytesTotal > 0 {
 					speed := float64(s.bytesTotal) / time.Since(s.StartTime).Seconds()
-					st.TransferSpeed = fmt.Sprintf("%.2f MB/s", speed/(1024*1024))
+					st.TransferSpeed = fmt.Sprintf("%s/s", formatBytes(int64(speed)))
 				}
 			}
 			serversMu.RUnlock()
 
 			if cs := calcCacheSize(); cs > 0 {
-				st.CacheSize = fmt.Sprintf("%dMB", cs/(1024*1024))
+				st.CacheSize = formatBytes(cs)
 			}
 		} else {
 			st.Status = "stopped"
@@ -778,7 +799,7 @@ func showStatus(jsonOutput bool) {
 	}
 }
 
-// ==================== লগ ====================
+// ==================== LOGS ====================
 
 func showLogs(remote, port string, lines int) {
 	logFile := filepath.Join(config.LogDir, fmt.Sprintf("%s_%s.log", remote, port))
@@ -803,7 +824,7 @@ func showLogs(remote, port string, lines int) {
 	}
 }
 
-// ==================== লগ রোটেশন ====================
+// ==================== LOG ROTATION ====================
 
 func startLogRotator(logPath string, stopChan chan bool) {
 	ticker := time.NewTicker(5 * time.Minute)
@@ -881,7 +902,7 @@ func pruneOldLogs(logPath string) {
 	}
 }
 
-// ==================== চেক ====================
+// ==================== CHECK ====================
 
 func checkServer(remote, port string) {
 	fmt.Printf("\n=== Checking %s:%s ===\n", remote, port)
@@ -921,14 +942,14 @@ func checkServer(remote, port string) {
 	}
 
 	if cs := calcCacheSize(); cs > 0 {
-		fmt.Printf("Cache size: %d MB\n", cs/(1024*1024))
+		fmt.Printf("Cache size: %s\n", formatBytes(cs))
 	}
 }
 
-// ==================== পোর্ট ====================
+// ==================== PORTS ====================
 
 func showPorts() {
-	// শুধু pid ফাইল আছে এমন পোর্ট দেখাই — full scan স্লো
+	// Only show ports with existing pid files — full scan is slow
 	fmt.Println("\nActive ports:")
 	fmt.Println("PORT\tSTATUS\tSERVER")
 	fmt.Println("----\t------\t------")
@@ -956,7 +977,58 @@ func showPorts() {
 	}
 }
 
-// ==================== হেলথ ====================
+// ==================== CACHE CLEAR ====================
+
+func clearCache(remote, port string) {
+	var targetDir string
+
+	if remote != "" && port != "" {
+		// Specific server cache: cache/<remote>_<port>/
+		targetDir = filepath.Join(config.CacheDir, fmt.Sprintf("%s_%s", remote, port))
+	} else {
+		// All cache
+		targetDir = config.CacheDir
+	}
+
+	// Size before
+	var before int64
+	filepath.Walk(targetDir, func(_ string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			before += info.Size()
+		}
+		return nil
+	})
+
+	if before == 0 {
+		fmt.Println("[INFO] Cache is already empty.")
+		return
+	}
+
+	fmt.Printf("[INFO] Clearing cache: %s\n", targetDir)
+	fmt.Printf("[INFO] Size before: %s\n", formatBytes(before))
+
+	// Remove contents but keep the directory itself
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		fmt.Printf("[ERROR] Cannot read cache dir: %v\n", err)
+		return
+	}
+	for _, entry := range entries {
+		path := filepath.Join(targetDir, entry.Name())
+		if err := os.RemoveAll(path); err != nil {
+			fmt.Printf("[WARN] Could not remove %s: %v\n", path, err)
+		}
+	}
+
+	// Update cached size
+	cacheSizeMu.Lock()
+	cachedCacheSize = 0
+	cacheSizeMu.Unlock()
+
+	fmt.Printf("[OK] Cache cleared. Freed %s.\n", formatBytes(before))
+}
+
+// ==================== HEALTH ====================
 
 func healthCheck(jsonOutput bool) {
 	type serverEntry struct {
@@ -1050,7 +1122,7 @@ func healthCheck(jsonOutput bool) {
 	}
 }
 
-// ==================== প্রোফাইল দেখানো ====================
+// ==================== SHOW PROFILES ====================
 
 func showProfiles() {
 	fmt.Println("\n=== Performance Profiles ===")
@@ -1081,7 +1153,7 @@ func showProfiles() {
 	fmt.Printf("\nCurrent default: %s\n", config.Profile)
 }
 
-// ==================== কনফিগ কমান্ড ====================
+// ==================== CONFIG COMMAND ====================
 
 func handleConfig(args []string) {
 	if len(args) == 0 {
@@ -1090,7 +1162,7 @@ func handleConfig(args []string) {
 		return
 	}
 
-	// একটি শব্দ = প্রোফাইল সেট
+	// Single word = set profile
 	if len(args) == 1 {
 		switch args[0] {
 		case "light", "balanced", "heavy":
@@ -1279,7 +1351,7 @@ func setHeavyKey(key, value string) {
 	}
 }
 
-// ==================== সিগন্যাল হ্যান্ডলার ====================
+// ==================== SIGNAL HANDLER ====================
 
 func setupSignalHandler() {
 	c := make(chan os.Signal, 1)
@@ -1292,7 +1364,7 @@ func setupSignalHandler() {
 	}()
 }
 
-// ==================== ইউসেজ ====================
+// ==================== USAGE ====================
 
 func usage() {
 	fmt.Printf("╔════════════════════════════════════════════════════════════╗\n")
@@ -1311,6 +1383,7 @@ Commands:
   health [--json]
   config [KEY=VALUE ...]
   profiles
+  clear-cache [REMOTE PORT]   Clear VFS cache (all servers, or specific server)
 
 Profiles:
   light     - Small files, low memory
@@ -1323,10 +1396,12 @@ Examples:
   rclone-sftp config heavy.vfs_cache_max_size=500G heavy.transfers=16
   rclone-sftp profiles
   rclone-sftp health
+  rclone-sftp clear-cache
+  rclone-sftp clear-cache gdrive 8888
 `)
 }
 
-// ==================== মেইন ====================
+// ==================== MAIN ====================
 
 func parseStartArgs(osArgs []string, defaultProfile string) (pass, passwordFile, profile string) {
 	profile = defaultProfile
@@ -1417,15 +1492,22 @@ func main() {
 	case "config":
 		handleConfig(os.Args[2:])
 
+	case "clear-cache":
+		if len(os.Args) >= 4 {
+			clearCache(os.Args[2], os.Args[3])
+		} else {
+			clearCache("", "")
+		}
+
 	case "install-service":
 		execPath, _ := os.Executable()
-		fmt.Printf(`# ~/.bashrc এ যোগ করুন:
+		fmt.Printf(`# Add to ~/.bashrc:
 alias rclone-sftp="%s"
 
-# ডিরেক্টরি তৈরি:
+# Create directories:
 mkdir -p ~/.local/share/rclone-sftp/{cache,temp,logs,meta}
 
-# ডিফল্ট প্রোফাইল সেট:
+# Set default profile:
 %s config balanced
 `, execPath, execPath)
 

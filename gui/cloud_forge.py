@@ -871,6 +871,12 @@ class ServerTab(QWidget):
         self.btn_open_fm.clicked.connect(self.open_in_filemanager)
         tb.addWidget(self.btn_open_fm)
 
+        self.btn_clear_cache = QPushButton("🗑  Clear Cache")
+        self.btn_clear_cache.setObjectName("btn_danger")
+        self.btn_clear_cache.setToolTip("Clear rclone VFS cache (frees disk space)")
+        self.btn_clear_cache.clicked.connect(self.clear_cache)
+        tb.addWidget(self.btn_clear_cache)
+
         tb.addStretch()
 
         self.btn_refresh = QPushButton("↻")
@@ -1135,6 +1141,36 @@ class ServerTab(QWidget):
         return "user"
 
 
+    def clear_cache(self):
+        remote, port = self._selected_row()
+
+        if remote and port:
+            # Specific server selected
+            reply = QMessageBox.question(
+                self, "Clear Cache",
+                f"Clear VFS cache for {remote}:{port}?\n\nThis will free disk space but may slow down the next access.",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                self._run([self.sftp, "clear-cache", remote, port],
+                          on_done=self._after_clear_cache)
+        else:
+            # No server selected — clear all
+            reply = QMessageBox.question(
+                self, "Clear All Cache",
+                "Clear ALL VFS cache?\n\nThis will free disk space but may slow down the next access.",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                self._run([self.sftp, "clear-cache"],
+                          on_done=self._after_clear_cache)
+
+    def _after_clear_cache(self, out, ok):
+        self._default_done(out, ok)
+        # Update cache column in table
+        QTimer.singleShot(1000, self.refresh_status)
+
+
 # ==================== Config Tab ====================
 
 class ConfigTab(QWidget):
@@ -1252,7 +1288,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("cloud-forge")
         self.setMinimumSize(1900, 800)
-        self.resize(1700, 750)
+        self.resize(2048, 920)
 
         self.rclone_bin = self._find_bin("rclone")
         self.sftp_bin   = self._find_sftp_bin()
