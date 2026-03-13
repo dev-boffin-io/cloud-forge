@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # ─── Resolve Paths ──────────────────────────────────────────────────────
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -9,10 +9,13 @@ BIN_DIR="$PROJECT_ROOT/bin"
 BUILD_DIR="$PROJECT_ROOT/build"
 GUI_BIN="$PROJECT_ROOT/cloud-forge"
 SFTP_BIN="$BIN_DIR/rclone-sftp"
+ENGEN_BIN="$PROJECT_ROOT/rclone-engen"
 ICON="$PROJECT_ROOT/cloud-forge.png"
 
 DESKTOP_DIR="$HOME/.local/share/applications"
 DESKTOP_FILE="$DESKTOP_DIR/cloud-forge.desktop"
+
+SYMLINK_DIRS=("$HOME/.local/bin" "/usr/local/bin")
 
 # ─── Helper ─────────────────────────────────────────────────────────────
 info()    { echo "  [INFO]  $*"; }
@@ -26,14 +29,16 @@ usage() {
     echo "  cloud-forge installer"
     echo ""
     echo "  Usage:"
-    echo "    ./install.sh           Install desktop entry only"
-    echo "    ./install.sh --build   Build binaries, then install"
-    echo "    ./install.sh --remove  Remove desktop entry"
+    echo "    ./install.sh --build              Build all binaries (CLI + GUI)"
+    echo "    ./install.sh --build --cli        Build CLI binaries only (rclone-sftp + rclone-engen)"
+    echo "    ./install.sh --install            Install symlinks + desktop entry"
+    echo "    ./install.sh --build --install    Build everything, then install"
+    echo "    ./install.sh --remove             Remove symlinks and desktop entry"
     echo ""
 }
 
-# ─── Build ──────────────────────────────────────────────────────────────
-do_build() {
+# ─── Build CLI ──────────────────────────────────────────────────────────
+build_cli() {
     section "Building rclone-sftp (Go binary)"
     if [ ! -f "$BUILD_DIR/build-bin.sh" ]; then
         err "build-bin.sh not found at $BUILD_DIR/build-bin.sh"
@@ -41,6 +46,16 @@ do_build() {
     fi
     bash "$BUILD_DIR/build-bin.sh"
 
+    section "Building rclone-engen (Python binary)"
+    if [ ! -f "$BUILD_DIR/build-main.sh" ]; then
+        err "build-main.sh not found at $BUILD_DIR/build-main.sh"
+        exit 1
+    fi
+    bash "$BUILD_DIR/build-main.sh"
+}
+
+# ─── Build GUI ──────────────────────────────────────────────────────────
+build_gui() {
     section "Building cloud-forge GUI (PyInstaller)"
     if [ ! -f "$BUILD_DIR/build-gui.sh" ]; then
         err "build-gui.sh not found at $BUILD_DIR/build-gui.sh"
@@ -58,21 +73,81 @@ do_checks() {
         err "Run './install.sh --build' to build first."
         exit 1
     fi
-    ok "cloud-forge     : $GUI_BIN"
+    ok "cloud-forge  : $GUI_BIN"
 
     if [ ! -f "$SFTP_BIN" ]; then
         err "rclone-sftp not found: $SFTP_BIN"
         err "Run './install.sh --build' to build first."
         exit 1
     fi
-    ok "rclone-sftp     : $SFTP_BIN"
+    ok "rclone-sftp  : $SFTP_BIN"
+
+    if [ ! -f "$ENGEN_BIN" ]; then
+        err "rclone-engen not found: $ENGEN_BIN"
+        err "Run './install.sh --build' to build first."
+        exit 1
+    fi
+    ok "rclone-engen : $ENGEN_BIN"
 
     if [ ! -f "$ICON" ]; then
         info "Icon not found: $ICON  (desktop entry will have no icon)"
         ICON=""
     else
-        ok "Icon            : $ICON"
+        ok "Icon         : $ICON"
     fi
+}
+
+# ─── Symlink helper ─────────────────────────────────────────────────────
+_make_symlink() {
+    local binary="$1"
+    local name="$2"
+    local target=""
+
+    for dir in "${SYMLINK_DIRS[@]}"; do
+        if [ -d "$dir" ] && [ -w "$dir" ]; then
+            target="$dir/$name"
+            break
+        fi
+    done
+
+    if [ -z "$target" ]; then
+        mkdir -p "$HOME/.local/bin"
+        target="$HOME/.local/bin/$name"
+    fi
+
+    if [ -L "$target" ] || [ -f "$target" ]; then
+        rm -f "$target"
+        info "Removed old: $target"
+    fi
+
+    ln -s "$binary" "$target"
+    ok "Symlink: $target → $binary"
+
+    if ! echo "$PATH" | tr ':' '\n' | grep -qx "$(dirname "$target")"; then
+        info "Note: $(dirname "$target") is not in PATH."
+        info "Add to ~/.bashrc:  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+}
+
+# ─── Symlinks ────────────────────────────────────────────────────────────
+do_symlinks() {
+    section "Installing symlinks"
+    _make_symlink "$SFTP_BIN"  "rclone-sftp"
+    _make_symlink "$ENGEN_BIN" "rclone-engen"
+}
+
+# ─── Remove symlinks ─────────────────────────────────────────────────────
+remove_symlinks() {
+    section "Removing symlinks"
+    for name in rclone-sftp rclone-engen; do
+        for dir in "${SYMLINK_DIRS[@]}"; do
+            target="$dir/$name"
+            if [ -L "$target" ] || [ -f "$target" ]; then
+                rm -f "$target"
+                ok "Removed: $target"
+            fi
+        done
+    done
 }
 
 # ─── Desktop Entry ──────────────────────────────────────────────────────
@@ -98,12 +173,11 @@ EOF
 
     chmod +x "$DESKTOP_FILE"
 
-    # Update desktop database if available
     if command -v update-desktop-database >/dev/null 2>&1; then
         update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
     fi
 
-    ok "Desktop entry installed: $DESKTOP_FILE"
+    ok "Desktop entry: $DESKTOP_FILE"
     info "You can now launch cloud-forge from your application menu."
 }
 
@@ -119,6 +193,7 @@ do_remove() {
     else
         info "Desktop entry not found, nothing to remove."
     fi
+    remove_symlinks
 }
 
 # ─── Main ───────────────────────────────────────────────────────────────
@@ -127,28 +202,59 @@ echo "  ╔═══════════════════════
 echo "  ║        cloud-forge installer         ║"
 echo "  ╚══════════════════════════════════════╝"
 
-case "${1:-}" in
-    --build)
-        do_build
-        do_checks
+if [ $# -eq 0 ]; then
+    usage
+    exit 0
+fi
+
+DO_BUILD=false
+DO_INSTALL=false
+CLI_ONLY=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --build)   DO_BUILD=true ;;
+        --install) DO_INSTALL=true ;;
+        --cli)     CLI_ONLY=true ;;
+        --remove)
+            do_remove
+            echo ""
+            ok "Done."
+            echo ""
+            exit 0
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            err "Unknown option: $arg"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if ! $DO_BUILD && ! $DO_INSTALL; then
+    err "Specify at least --build or --install."
+    usage
+    exit 1
+fi
+
+if $DO_BUILD; then
+    build_cli
+    if ! $CLI_ONLY; then
+        build_gui
+    fi
+fi
+
+if $DO_INSTALL; then
+    do_checks
+    do_symlinks
+    if ! $CLI_ONLY; then
         do_desktop_entry
-        ;;
-    --remove)
-        do_remove
-        ;;
-    --help|-h)
-        usage
-        ;;
-    "")
-        do_checks
-        do_desktop_entry
-        ;;
-    *)
-        err "Unknown option: $1"
-        usage
-        exit 1
-        ;;
-esac
+    fi
+fi
 
 echo ""
 ok "Done."

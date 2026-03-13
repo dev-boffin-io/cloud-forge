@@ -1,6 +1,6 @@
 # cloud-forge
 
-A suite of tools for managing **rclone cloud storage remotes** and **SFTP servers** — featuring a CLI binary (`rclone-sftp`) and a desktop GUI (`cloud-forge`).
+A suite of tools for managing **rclone cloud storage remotes** and **SFTP servers** — featuring a CLI binary (`rclone-sftp`), a rclone installer/updater (`rclone-engen`), and a desktop GUI (`cloud-forge`).
 
 ---
 
@@ -9,6 +9,7 @@ A suite of tools for managing **rclone cloud storage remotes** and **SFTP server
 | Component | Language | Description |
 |-----------|----------|-------------|
 | `rclone-sftp` | Go | CLI tool — start, stop, and manage rclone SFTP servers |
+| `rclone-engen` | Python | CLI tool — install, update, upgrade, and uninstall rclone |
 | `cloud-forge` | Python / PyQt5 | Desktop GUI — wraps both `rclone` and `rclone-sftp` |
 
 ---
@@ -21,17 +22,21 @@ cloud-forge/
 │   └── rclone-sftp          # Compiled Go binary
 ├── build/
 │   ├── build-bin.sh         # Build rclone-sftp (Go)
-│   ├── build-gui.sh         # Build cloud-forge GUI (PyInstaller, no root required)
+│   ├── build-main.sh        # Build rclone-engen (PyInstaller)
+│   ├── build-gui.sh         # Build cloud-forge GUI (PyInstaller)
 │   └── install-deps-gui.sh  # Install GUI system dependencies (requires sudo)
 ├── gui/
 │   └── cloud_forge.py       # PyQt5 GUI source
 ├── src/
+│   ├── rclone_engen.py      # rclone installer/updater source
 │   └── rclone-sftp/
 │       ├── go.mod
 │       └── main.go          # Go CLI source
 ├── cloud-forge              # Compiled GUI binary (after build)
-├── cloud-forge.png          # Application icon (512×512)
-└── install.sh               # Desktop entry installer
+├── rclone-engen             # Compiled rclone manager binary (after build)
+├── cloud-forge.png          # Application icon
+├── Makefile                 # Build and install targets
+└── install.sh               # Installer script
 ```
 
 ---
@@ -40,123 +45,171 @@ cloud-forge/
 
 ### Runtime
 - [`rclone`](https://rclone.org/) — must be installed and in `PATH`
-- Linux desktop environment with a file manager that supports `sftp://` URIs (Thunar, Nautilus, Dolphin, etc.)
+  (use `rclone-engen install` to install automatically)
+- Linux desktop environment with a file manager that supports `sftp://` URIs
+  (Thunar, Nautilus, Dolphin, etc.)
 
 ### Build
 
 | Tool | Purpose |
 |------|---------|
-| Go 1.21+ | Build `rclone-sftp` CLI |
-| Python 3.9+ | Run or build the GUI |
+| Go 1.21+ | Build `rclone-sftp` |
+| Python 3.9+ | Build `rclone-engen` and `cloud-forge` |
 | PyQt5 | GUI framework |
-| PyInstaller | Build standalone GUI binary |
+| PyInstaller | Build standalone binaries |
 
 ---
 
-## Installation
+## Quick Start
 
-### Quick install (binaries already built)
+### Standard Linux (x86_64)
 
 ```bash
-./install.sh
+# Build everything and install
+make install
 ```
 
-Installs a desktop entry to `~/.local/share/applications/cloud-forge.desktop`.
+### ARM64 / PRoot (e.g. Android Termux, Raspberry Pi)
 
-### Build from source, then install
-
-```bash
-./install.sh --build
-```
-
-Runs `build/build-bin.sh` → `build/build-gui.sh` → installs the desktop entry.
-
-### Remove desktop entry
+PyQt5 pip wheels are not available on ARM64 — system packages must be
+installed first:
 
 ```bash
-./install.sh --remove
+# Step 1 — install system packages (once)
+make deps
+
+# Step 2 — build and install
+make install
 ```
 
 ---
 
-## Building
+## Makefile Targets
 
-### Step 1 — rclone-sftp (Go binary)
+| Target | Description |
+|--------|-------------|
+| `make deps` | Install GUI system dependencies via package manager (requires sudo) |
+| `make build` | Build all binaries — `rclone-sftp`, `rclone-engen`, `cloud-forge` |
+| `make build-cli` | Build CLI binaries only — `rclone-sftp` + `rclone-engen` |
+| `make build-gui` | Build GUI binary only — `cloud-forge` |
+| `make install` | Build everything, then install symlinks + desktop entry |
+| `make install-only` | Install pre-built binaries only — symlinks + desktop entry, no build |
+| `make install-cli` | Build CLI only, then install symlinks (no desktop entry) |
+| `make uninstall` | Remove symlinks and desktop entry |
+| `make clean` | Remove all build outputs and artefacts |
+| `make help` | Show all available targets |
+
+---
+
+## install.sh
+
+The installer script is called by `make` targets but can also be used directly.
+
+```bash
+./install.sh --build              # Build all binaries
+./install.sh --build --cli        # Build CLI binaries only
+./install.sh --install            # Install pre-built binaries (symlinks + desktop entry)
+./install.sh --build --install    # Build everything, then install
+./install.sh --remove             # Remove symlinks and desktop entry
+```
+
+`--install` places symlinks in `~/.local/bin/` (or `/usr/local/bin/` if
+writable) for both `rclone-sftp` and `rclone-engen`, and installs a desktop
+entry for the GUI at `~/.local/share/applications/cloud-forge.desktop`.
+
+---
+
+## Building Individually
+
+### rclone-sftp (Go binary)
 
 ```bash
 bash build/build-bin.sh
 # Output: bin/rclone-sftp
 ```
 
-### Step 2 — GUI system dependencies (ARM64 / PRoot only)
-
-On ARM64 devices (e.g. Android PRoot, Raspberry Pi), PyQt5 pip wheels are not
-available. System packages must be installed once before building:
+### rclone-engen (Python binary)
 
 ```bash
-sudo bash build/install-deps-gui.sh
+bash build/build-main.sh
+# Output: rclone-engen
 ```
 
-Supported distributions: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`),
-Arch (`pacman`), openSUSE (`zypper`), Alpine (`apk`).
+Builds a single-file binary via PyInstaller, then removes all build artefacts
+including the temporary venv.
 
-On x86\_64 the build script handles everything automatically — this step can be skipped.
-
-### Step 3 — cloud-forge GUI (standalone binary via PyInstaller)
+### cloud-forge GUI
 
 ```bash
 bash build/build-gui.sh
 # Output: cloud-forge
 ```
 
-The build script:
-- Detects the Python interpreter (`python3` or `python`)
-- Creates an isolated virtual environment under `build/.venv-build/`
-- On ARM64: uses `--system-site-packages` to access the system PyQt5, installs only PyInstaller into the venv
-- On x86\_64: installs PyQt5 and PyInstaller from pip, fully isolated
-- Resolves a PyInstaller version compatible with the running Python automatically (no hardcoded version pin)
-- Cleans up the venv after a successful build
-
-> **Note:** Do not run `build-gui.sh` as root. It will refuse to proceed.
-> Run `install-deps-gui.sh` with sudo separately if system packages are needed.
-
-### Both at once
-
-```bash
-./install.sh --build
-```
-
 ---
 
-## Running the GUI from source
+## rclone-engen
+
+Manages the `rclone` binary — install, update, upgrade, and uninstall without
+visiting the rclone website manually. Auto-detects architecture (amd64, arm64,
+arm-v7).
+
+### Commands
+
+```
+rclone-engen install     Install the latest rclone
+rclone-engen update      Check if a newer version is available
+rclone-engen upgrade     Download and replace rclone with the latest version
+rclone-engen uninstall   Remove the installed rclone binary
+rclone-engen version     Show the currently installed rclone version
+```
+
+### Examples
 
 ```bash
-pip install PyQt5
-python3 gui/cloud_forge.py
+# Install rclone
+rclone-engen install
+
+# Check for updates
+rclone-engen update
+# Installed version : v1.68.0
+# Latest version    : v1.69.1
+# Update available.
+
+# Upgrade to latest
+rclone-engen upgrade
+
+# Show installed version
+rclone-engen version
 ```
+
+Install locations (first writable wins):
+
+1. `/usr/local/bin/rclone`
+2. `~/.local/bin/rclone`
 
 ---
 
 ## rclone-sftp CLI
 
-The `rclone-sftp` binary wraps `rclone serve sftp` with persistent server
-management: PID tracking, log rotation, metadata persistence across restarts,
+Wraps `rclone serve sftp` with persistent server management: PID tracking,
+log rotation, metadata persistence across restarts, VFS cache management,
 and three performance profiles.
 
 ### Commands
 
 ```
-rclone-sftp start   REMOTE [PORT|auto] USER [PASS] [--password-file FILE] [--profile PROFILE]
-rclone-sftp stop    REMOTE PORT
+rclone-sftp start       REMOTE [PORT|auto] USER [PASS] [--password-file FILE] [--profile PROFILE]
+rclone-sftp stop        REMOTE PORT
 rclone-sftp stop-all
-rclone-sftp restart REMOTE PORT USER [PASS] [--profile PROFILE]
-rclone-sftp status  [--json]
-rclone-sftp logs    REMOTE PORT [LINES]
-rclone-sftp check   REMOTE PORT
+rclone-sftp restart     REMOTE PORT USER [PASS] [--profile PROFILE]
+rclone-sftp status      [--json]
+rclone-sftp logs        REMOTE PORT [LINES]
+rclone-sftp check       REMOTE PORT
 rclone-sftp ports
-rclone-sftp health  [--json]
-rclone-sftp config  [KEY=VALUE ...]
+rclone-sftp health      [--json]
+rclone-sftp config      [KEY=VALUE ...]
 rclone-sftp profiles
+rclone-sftp clear-cache [REMOTE PORT]
 ```
 
 ### Examples
@@ -191,35 +244,35 @@ rclone-sftp config heavy.buffer_size=128M heavy.transfers=16
 
 # Check server and system health
 rclone-sftp health
+
+# Clear all VFS cache
+rclone-sftp clear-cache
+
+# Clear cache for a specific server
+rclone-sftp clear-cache gdrive 8888
 ```
 
 ---
 
 ## Performance Profiles
 
-Three built-in profiles tune rclone flags for different workloads.
-
-### Light
-Small files, minimal memory usage.
+### Light — small files, minimal memory
 
 | Parameter | Value |
 |-----------|-------|
 | `--buffer-size` | 16M |
 | `--transfers` | 2 |
 | `--checkers` | 4 |
-| `--sftp-concurrency` | 2 |
 | `--vfs-cache-mode` | off |
 | `--timeout` | 30m |
 
-### Balanced *(default)*
-Medium files, good all-round performance.
+### Balanced *(default)* — medium files, good all-round performance
 
 | Parameter | Value |
 |-----------|-------|
 | `--buffer-size` | 32M |
 | `--transfers` | 4 |
 | `--checkers` | 8 |
-| `--sftp-concurrency` | 4 |
 | `--vfs-cache-mode` | writes |
 | `--vfs-cache-max-size` | 50G |
 | `--vfs-cache-max-age` | 72h |
@@ -228,15 +281,13 @@ Medium files, good all-round performance.
 | `--timeout` | 1h |
 | `--low-level-retries` | 10 |
 
-### Heavy
-Large files (100 GB+), maximum throughput.
+### Heavy — large files 100GB+, maximum throughput
 
 | Parameter | Value |
 |-----------|-------|
 | `--buffer-size` | 64M |
 | `--transfers` | 8 |
 | `--checkers` | 16 |
-| `--sftp-concurrency` | 8 |
 | `--vfs-cache-mode` | full |
 | `--vfs-cache-max-size` | 200G |
 | `--vfs-cache-max-age` | 168h |
@@ -246,7 +297,7 @@ Large files (100 GB+), maximum throughput.
 | `--low-level-retries` | 20 |
 | `--max-connections` | 20 |
 
-Profile values can be customised at runtime without editing any config files:
+Profile values can be customised at runtime:
 
 ```bash
 rclone-sftp config heavy.vfs_cache_max_size=500G
@@ -257,8 +308,8 @@ rclone-sftp config balanced.transfers=8
 
 ## Configuration
 
-Configuration is stored at `~/.local/share/rclone-sftp/config.json` and is
-created automatically on first run.
+Stored at `~/.local/share/rclone-sftp/config.json`, created automatically on
+first run.
 
 ### Global keys
 
@@ -274,11 +325,9 @@ created automatically on first run.
 | `port_range_from` | `8022` | Start of auto-assign port range |
 | `port_range_to` | `9000` | End of auto-assign port range |
 | `verbose` | `false` | Enable rclone `-vv` verbose logging |
-| `config_path` | _(empty)_ | Path to rclone config file (uses rclone default if unset) |
+| `config_path` | _(empty)_ | Path to rclone config file |
 
 ### Profile keys
-
-Prefix any profile parameter with `light.`, `balanced.`, or `heavy.`:
 
 ```bash
 rclone-sftp config heavy.buffer_size=128M
@@ -290,64 +339,60 @@ rclone-sftp config light.timeout=1h
 
 ## Runtime Data
 
-All runtime data is stored under `~/.local/share/rclone-sftp/`:
-
 ```
 ~/.local/share/rclone-sftp/
-├── config.json                    # Main configuration
-├── <remote>_<port>.pid            # PID file per running server
+├── config.json                  # Main configuration
+├── <remote>_<port>.pid          # PID file per running server
 ├── meta/
-│   └── <remote>_<port>.json       # Persistent server metadata
+│   └── <remote>_<port>.json     # Persistent server metadata
 ├── logs/
-│   └── <remote>_<port>.log        # Server log (auto-rotated, gzip compressed)
-├── cache/                         # rclone VFS cache
-└── temp/                          # rclone temp files
+│   └── <remote>_<port>.log      # Server log (auto-rotated, gzip compressed)
+├── cache/                       # rclone VFS cache
+└── temp/                        # rclone temp files
 ```
-
-Server metadata (profile, start time, user, PID) is persisted to disk so that
-`status`, `check`, and uptime display correctly after a program restart — even
-if the underlying rclone process was started in a previous session.
 
 ---
 
 ## cloud-forge GUI
 
-The desktop GUI provides a graphical interface for all `rclone` and
-`rclone-sftp` operations.
-
 ### Remote Manager tab
 
-| Button | Command |
-|--------|---------|
-| Add Remote | Opens `rclone config` in a terminal emulator |
+| Button | Action |
+|--------|--------|
+| Add Remote | GUI wizard — select provider, fill credentials, OAuth browser auth |
 | Refresh | `rclone listremotes --long` |
 | Browse | `rclone lsd <remote>:` |
-| Rename | `rclone config rename <old> <new>` |
+| Rename | `rclone config rename` |
 | Dump Config | `rclone config dump` |
-| Delete | `rclone config delete <remote>` |
+| Delete | `rclone config delete` |
+
+Supported providers in the Add Remote wizard: Google Drive, Google Photos,
+OneDrive, Dropbox, Amazon S3, Backblaze B2, SFTP, FTP, WebDAV, pCloud, Mega,
+Box, Yandex Disk, iCloud Drive, Cloudflare R2, Wasabi, HTTP, Local filesystem.
 
 ### SFTP Servers tab
 
 | Button | Action |
 |--------|--------|
 | Start Server | Dialog → `rclone-sftp start` |
-| Stop | `rclone-sftp stop <remote> <port>` |
+| Stop | `rclone-sftp stop` |
 | Stop All | `rclone-sftp stop-all` |
-| Restart | Dialog → `rclone-sftp restart` |
-| Logs | `rclone-sftp logs <remote> <port>` |
-| Check | `rclone-sftp check <remote> <port>` |
+| Restart | `rclone-sftp restart` |
+| Logs | `rclone-sftp logs` |
+| Check | `rclone-sftp check` |
 | Ports | `rclone-sftp ports` |
 | Health | `rclone-sftp health` |
 | Profiles | `rclone-sftp profiles` |
 | Open in Files | Opens `sftp://user@127.0.0.1:<port>/` in the system file manager |
+| Clear Cache | `rclone-sftp clear-cache` — frees VFS cache disk space |
 
 The server table auto-refreshes every 5 seconds. Running servers are
 highlighted in green, stopped servers in red.
 
 ### Config tab
 
-Set the default profile and apply custom `key=value` configuration directly
-from the GUI.
+Set the default profile and apply custom `key=value` configuration from
+the GUI.
 
 ### Binary discovery
 
@@ -361,64 +406,24 @@ The GUI locates `rclone-sftp` in this order:
 
 ---
 
-## Connecting via CLI (Without File Manager)
+## Connecting via CLI
 
-You can connect to the SFTP server using standard CLI tools like `sftp`, `scp`, or `rsync` since the server runs locally on `127.0.0.1:<port>`. No additional setup is needed beyond starting the server with `rclone-sftp start`.
+```bash
+# Start a server
+rclone-sftp start gdrive 8888 sumit mypassword
 
-### Instructions for Connecting with `sftp`
+# Connect interactively
+sftp -P 8888 sumit@127.0.0.1
 
-1. Start the SFTP server (as shown in examples above), e.g.:
-   ```bash
-   rclone-sftp start gdrive 8888 sumit mypassword
-   ```
+# Upload a file
+scp -P 8888 /path/to/file.txt sumit@127.0.0.1:/
 
-2. Connect using the `sftp` command:
-   ```bash
-   sftp -P 8888 sumit@127.0.0.1
-   ```
-   - `-P <port>`: Specify the port (e.g., 8888).
-   - `sumit`: The username you set when starting the server.
-   - Enter the password when prompted (or use key-based auth if configured).
-   
-   Once connected, you'll be in an interactive SFTP shell where you can use commands like `ls`, `cd`, `get`, `put`, etc.
+# Download a file
+scp -P 8888 sumit@127.0.0.1:/file.txt /path/to/local/
 
-### Examples for File Copy/Send
-
-#### Using `sftp` (Interactive Mode)
-- Upload a local file to the remote (cloud storage):
-  ```bash
-  sftp> put /path/to/local/file.txt /remote/path/
-  ```
-- Download a file from the remote:
-  ```bash
-  sftp> get /remote/path/file.txt /path/to/local/
-  ```
-- Exit the session:
-  ```bash
-  sftp> bye
-  ```
-
-#### Using `scp` (Non-Interactive Copy)
-- Upload a file:
-  ```bash
-  scp -P 8888 /path/to/local/file.txt sumit@127.0.0.1:/remote/path/
-  ```
-- Download a file:
-  ```bash
-  scp -P 8888 sumit@127.0.0.1:/remote/path/file.txt /path/to/local/
-  ```
-
-#### Using `rsync` (For Syncing Directories)
-- Sync a local directory to remote:
-  ```bash
-  rsync -avz -e "ssh -p 8888" /path/to/local/dir/ sumit@127.0.0.1:/remote/path/
-  ```
-- Sync from remote to local:
-  ```bash
-  rsync -avz -e "ssh -p 8888" sumit@127.0.0.1:/remote/path/ /path/to/local/dir/
-  ```
-
-> **Note:** For password-less access, generate SSH keys and add the public key to the server's authorized_keys (via rclone config if needed). These tools require OpenSSH or equivalent installed.
+# Sync a directory
+rsync -avz -e "ssh -p 8888" /path/to/dir/ sumit@127.0.0.1:/backup/
+```
 
 ---
 
@@ -426,7 +431,7 @@ You can connect to the SFTP server using standard CLI tools like `sftp`, `scp`, 
 
 | Variable | Description |
 |----------|-------------|
-| `RCLONE_SFTP_PASS` | Server password (alternative to passing on the command line) |
+| `RCLONE_SFTP_PASS` | Server password (alternative to CLI argument) |
 | `RCLONE_BINARY` | Path to rclone binary (defaults to `rclone` in `PATH`) |
 | `RCLONE_CONFIG` | Path to rclone config file |
 
@@ -434,12 +439,13 @@ You can connect to the SFTP server using standard CLI tools like `sftp`, `scp`, 
 
 ## Signal Handling
 
-`rclone-sftp` handles `SIGINT` and `SIGTERM` gracefully — on receipt it stops
-all running servers before exiting.
+`rclone-sftp` handles `SIGINT` and `SIGTERM` gracefully — stops all running
+servers before exiting.
 
 ---
 
 ## Credits
 
-- [rclone](https://rclone.org/) — the underlying cloud storage engine powering all SFTP serving and remote management. This project is a management and GUI layer built on top of `rclone serve sftp`.
+- [rclone](https://rclone.org/) — the underlying cloud storage engine. This
+  project is a management and GUI layer built on top of `rclone serve sftp`.
 - [PyQt5](https://riverbankcomputing.com/software/pyqt/) — desktop GUI framework.
