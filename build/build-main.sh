@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# build/build-main.sh — Build rclone-engen binary from src/rclone_engen.py
-# Output: <project-root>/rclone-engen
+# build/build-main.sh — Build rclone-engine binary from src/rclone_engine.py
+# Output: <project-root>/rclone-engine
 
 set -euo pipefail
 
@@ -8,8 +8,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SRC_FILE="${PROJECT_ROOT}/src/rclone_engen.py"
-OUTPUT_NAME="rclone-engen"
+SRC_FILE="${PROJECT_ROOT}/src/rclone_engine.py"
+OUTPUT_NAME="rclone-engine"
 OUTPUT_BIN="${PROJECT_ROOT}/${OUTPUT_NAME}"
 BUILD_WORK="${PROJECT_ROOT}/build/.pyinstaller"
 

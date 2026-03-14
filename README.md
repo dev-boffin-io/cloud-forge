@@ -1,6 +1,6 @@
 # cloud-forge
 
-A suite of tools for managing **rclone cloud storage remotes** and **SFTP servers** — featuring a CLI binary (`rclone-sftp`), a rclone installer/updater (`rclone-engen`), and a desktop GUI (`cloud-forge`).
+A suite of tools for managing **rclone cloud storage remotes** and **SFTP servers** — featuring a CLI binary (`rclone-sftp`), a rclone installer/updater (`rclone-engine`), and a desktop GUI (`cloud-forge`).
 
 ---
 
@@ -9,7 +9,7 @@ A suite of tools for managing **rclone cloud storage remotes** and **SFTP server
 | Component | Language | Description |
 |-----------|----------|-------------|
 | `rclone-sftp` | Go | CLI tool — start, stop, and manage rclone SFTP servers |
-| `rclone-engen` | Python | CLI tool — install, update, upgrade, and uninstall rclone |
+| `rclone-engine` | Python | CLI tool — install, update, upgrade, and uninstall rclone |
 | `cloud-forge` | Python / PyQt5 | Desktop GUI — wraps both `rclone` and `rclone-sftp` |
 
 ---
@@ -28,12 +28,12 @@ cloud-forge/
 ├── gui/
 │   └── cloud_forge.py       # PyQt5 GUI source
 ├── src/
-│   ├── rclone_engen.py      # rclone installer/updater source
+│   ├── rclone_engine.py      # rclone installer/updater source
 │   └── rclone-sftp/
 │       ├── go.mod
 │       └── main.go          # Go CLI source
 ├── cloud-forge              # Compiled GUI binary (after build)
-├── rclone-engen             # Compiled rclone manager binary (after build)
+├── rclone-engine             # Compiled rclone manager binary (after build)
 ├── cloud-forge.png          # Application icon
 ├── Makefile                 # Build and install targets
 └── install.sh               # Installer script
@@ -45,7 +45,7 @@ cloud-forge/
 
 ### Runtime
 - [`rclone`](https://rclone.org/) — must be installed and in `PATH`
-  (use `rclone-engen install` to install automatically)
+  (use `rclone-engine install` to install automatically)
 - Linux desktop environment with a file manager that supports `sftp://` URIs
   (Thunar, Nautilus, Dolphin, etc.)
 
@@ -54,7 +54,7 @@ cloud-forge/
 | Tool | Purpose |
 |------|---------|
 | Go 1.21+ | Build `rclone-sftp` |
-| Python 3.9+ | Build `rclone-engen` and `cloud-forge` |
+| Python 3.9+ | Build `rclone-engine` and `cloud-forge` |
 | PyQt5 | GUI framework |
 | PyInstaller | Build standalone binaries |
 
@@ -89,8 +89,8 @@ make install
 | Target | Description |
 |--------|-------------|
 | `make deps` | Install GUI system dependencies via package manager (requires sudo) |
-| `make build` | Build all binaries — `rclone-sftp`, `rclone-engen`, `cloud-forge` |
-| `make build-cli` | Build CLI binaries only — `rclone-sftp` + `rclone-engen` |
+| `make build` | Build all binaries — `rclone-sftp`, `rclone-engine`, `cloud-forge` |
+| `make build-cli` | Build CLI binaries only — `rclone-sftp` + `rclone-engine` |
 | `make build-gui` | Build GUI binary only — `cloud-forge` |
 | `make install` | Build everything, then install symlinks + desktop entry |
 | `make install-only` | Install pre-built binaries only — symlinks + desktop entry, no build |
@@ -132,7 +132,7 @@ bash build/build-bin.sh
 
 ```bash
 bash build/build-main.sh
-# Output: rclone-engen
+# Output: rclone-engine
 ```
 
 Builds a single-file binary via PyInstaller, then removes all build artefacts
@@ -156,30 +156,30 @@ arm-v7).
 ### Commands
 
 ```
-rclone-engen install     Install the latest rclone
-rclone-engen update      Check if a newer version is available
-rclone-engen upgrade     Download and replace rclone with the latest version
-rclone-engen uninstall   Remove the installed rclone binary
-rclone-engen version     Show the currently installed rclone version
+rclone-engine install     Install the latest rclone
+rclone-engine update      Check if a newer version is available
+rclone-engine upgrade     Download and replace rclone with the latest version
+rclone-engine uninstall   Remove the installed rclone binary
+rclone-engine version     Show the currently installed rclone version
 ```
 
 ### Examples
 
 ```bash
 # Install rclone
-rclone-engen install
+rclone-engine install
 
 # Check for updates
-rclone-engen update
+rclone-engine update
 # Installed version : v1.68.0
 # Latest version    : v1.69.1
 # Update available.
 
 # Upgrade to latest
-rclone-engen upgrade
+rclone-engine upgrade
 
 # Show installed version
-rclone-engen version
+rclone-engine version
 ```
 
 Install locations (first writable wins):

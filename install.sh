@@ -9,7 +9,7 @@ BIN_DIR="$PROJECT_ROOT/bin"
 BUILD_DIR="$PROJECT_ROOT/build"
 GUI_BIN="$PROJECT_ROOT/cloud-forge"
 SFTP_BIN="$BIN_DIR/rclone-sftp"
-ENGEN_BIN="$PROJECT_ROOT/rclone-engen"
+ENGEN_BIN="$PROJECT_ROOT/rclone-engine"
 ICON="$PROJECT_ROOT/cloud-forge.png"
 
 DESKTOP_DIR="$HOME/.local/share/applications"

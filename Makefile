@@ -57,7 +57,7 @@ uninstall:
 clean:
 	@echo "  [INFO]  Cleaning build outputs..."
 	@rm -f  "$(PROJECT_ROOT)/cloud-forge"
-	@rm -f  "$(PROJECT_ROOT)/rclone-engen"
+	@rm -f  "$(PROJECT_ROOT)/rclone-engine"
 	@rm -f  "$(PROJECT_ROOT)/bin/rclone-sftp"
 	@rm -rf "$(BUILD_DIR)/.pyinstaller"
 	@rm -rf "$(BUILD_DIR)/.venv-build"

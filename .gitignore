@@ -3,7 +3,7 @@ gui/_internal/
 
 # Built GUI binary
 cloud-forge
-rclone-engen
+rclone-engine
 
 # Built Go binaries
 bin/rclone-sftp
