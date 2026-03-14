@@ -331,11 +331,11 @@ def main():
 
         print("""
 Usage:
-  rclone_engen install
-  rclone_engen update
-  rclone_engen upgrade
-  rclone_engen uninstall
-  rclone_engen version
+  rclone_engine install
+  rclone_engine update
+  rclone_engine upgrade
+  rclone_engine uninstall
+  rclone_engine version
 """)
 
         return
