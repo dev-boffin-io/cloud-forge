@@ -19,11 +19,11 @@ deps:
 
 # ─── Build ──────────────────────────────────────────────────────────────────
 
-## build        Build all binaries (rclone-sftp + rclone-engen + cloud-forge)
+## build        Build all binaries (rclone-sftp + rclone-engine + cloud-forge)
 build:
 	@bash "$(INSTALL_SH)" --build
 
-## build-cli    Build CLI binaries only (rclone-sftp + rclone-engen)
+## build-cli    Build CLI binaries only (rclone-sftp + rclone-engine)
 build-cli:
 	@bash "$(INSTALL_SH)" --build --cli
 

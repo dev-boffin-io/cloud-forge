@@ -30,7 +30,7 @@ usage() {
     echo ""
     echo "  Usage:"
     echo "    ./install.sh --build              Build all binaries (CLI + GUI)"
-    echo "    ./install.sh --build --cli        Build CLI binaries only (rclone-sftp + rclone-engen)"
+    echo "    ./install.sh --build --cli        Build CLI binaries only (rclone-sftp + rclone-engine)"
     echo "    ./install.sh --install            Install symlinks + desktop entry"
     echo "    ./install.sh --build --install    Build everything, then install"
     echo "    ./install.sh --remove             Remove symlinks and desktop entry"
@@ -46,7 +46,7 @@ build_cli() {
     fi
     bash "$BUILD_DIR/build-bin.sh"
 
-    section "Building rclone-engen (Python binary)"
+    section "Building rclone-engine (Python binary)"
     if [ ! -f "$BUILD_DIR/build-main.sh" ]; then
         err "build-main.sh not found at $BUILD_DIR/build-main.sh"
         exit 1
@@ -83,11 +83,11 @@ do_checks() {
     ok "rclone-sftp  : $SFTP_BIN"
 
     if [ ! -f "$ENGEN_BIN" ]; then
-        err "rclone-engen not found: $ENGEN_BIN"
+        err "rclone-engine not found: $ENGEN_BIN"
         err "Run './install.sh --build' to build first."
         exit 1
     fi
-    ok "rclone-engen : $ENGEN_BIN"
+    ok "rclone-engine : $ENGEN_BIN"
 
     if [ ! -f "$ICON" ]; then
         info "Icon not found: $ICON  (desktop entry will have no icon)"
@@ -133,13 +133,13 @@ _make_symlink() {
 do_symlinks() {
     section "Installing symlinks"
     _make_symlink "$SFTP_BIN"  "rclone-sftp"
-    _make_symlink "$ENGEN_BIN" "rclone-engen"
+    _make_symlink "$ENGEN_BIN" "rclone-engine"
 }
 
 # ─── Remove symlinks ─────────────────────────────────────────────────────
 remove_symlinks() {
     section "Removing symlinks"
-    for name in rclone-sftp rclone-engen; do
+    for name in rclone-sftp rclone-engine; do
         for dir in "${SYMLINK_DIRS[@]}"; do
             target="$dir/$name"
             if [ -L "$target" ] || [ -f "$target" ]; then
