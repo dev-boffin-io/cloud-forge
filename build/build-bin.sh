@@ -91,15 +91,18 @@ ensure_module() {
     local pkg_dir="$1"
     local bin_name="$2"
 
-    if [[ ! -f "$pkg_dir/go.mod" ]]; then
-        echo -e "   ${BLUE}⚙️  Initializing module for ${bin_name}...${NC}"
-        (
-            cd "$pkg_dir"
-            go mod init "github.com/dev-boffin-io/cloud-forge/${bin_name}"
-        )
-    fi
+    # Fresh build — remove old module files and clean Go build cache
+    echo -e "   ${YELLOW}🧹 Cleaning Go cache and module files for ${bin_name}...${NC}"
+    go clean -cache 2>/dev/null || true
+    rm -f "$pkg_dir/go.mod" "$pkg_dir/go.sum"
 
-    # Fix #4 — tidy output is visible so errors are not silently swallowed.
+    echo -e "   ${BLUE}⚙️  Initializing module for ${bin_name}...${NC}"
+    (
+        cd "$pkg_dir"
+        go mod init "github.com/dev-boffin-io/cloud-forge/${bin_name}"
+    )
+
+    # Tidy output is visible so errors are not silently swallowed.
     echo -e "   ${BLUE}⚙️  Running go mod tidy for ${bin_name}...${NC}"
     (cd "$pkg_dir" && go mod tidy)
 }
