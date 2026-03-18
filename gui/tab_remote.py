@@ -236,32 +236,29 @@ class RemoteTab(BaseRunner):
     def _after_create_then_auth(self, out, ok, name):
         self.output.append_ok(f"[OK] Remote entry '{name}' ready.")
 
-        auth_cmd = [self.rclone, "config", "reconnect", f"{name}:"]
-        self.output.append_cmd(" ".join(auth_cmd))
+        # Use cf-config-launcher to open rclone config reconnect in a terminal.
+        # This is essential for OneDrive and other providers that ask interactive
+        # questions (e.g. "Select drive type", "Select drive") after OAuth.
+        # Running headless with stdin=PIPE causes rclone to loop indefinitely.
+        win = self.window()
+        cf_config = getattr(win, "cf_config_bin", None) or "cf-config-launcher"
+
+        self.output.append_cmd(f"{cf_config} reconnect {name}")
         self.output.append_line(
-            "[INFO] Browser window opening for authentication.\n"
-            "       Complete sign-in, then click Refresh.",
+            "[INFO] A terminal will open for authentication.\n"
+            "       Sign in with your browser, then answer any prompts\n"
+            "       in the terminal. Click Refresh when done.",
             DARK['warning']
         )
         try:
             env = os.environ.copy()
             if "DISPLAY" not in env and "WAYLAND_DISPLAY" not in env:
                 env["DISPLAY"] = ":0"
-            proc = subprocess.Popen(
-                auth_cmd,
-                stdin=subprocess.PIPE,
+            subprocess.Popen(
+                [cf_config, "reconnect", name],
                 env=env,
                 start_new_session=True,
             )
-            # Answer "y" to "Use web browser?" prompt
-            try:
-                if proc.stdin:
-                    time.sleep(0.3)
-                    proc.stdin.write(b"y\n")
-                    proc.stdin.flush()
-                    proc.stdin.close()
-            except Exception:
-                pass
         except Exception as e:
             self.output.append_err(f"[ERROR] Could not launch auth: {e}")
             return

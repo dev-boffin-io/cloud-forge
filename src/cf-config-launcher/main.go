@@ -8,55 +8,7 @@ import (
 	"strings"
 )
 
-// ------------------------------
-// Helper: detect terminal name safely
-// ------------------------------
-func isGnomeTerminal(path string) bool {
-	return strings.Contains(path, "gnome-terminal")
-}
-
-// ------------------------------
-// Shell escape for safe shell interpolation
-// ------------------------------
-func shellEscape(args []string) string {
-	var escaped []string
-	for _, a := range args {
-		escaped = append(escaped, fmt.Sprintf("%q", a))
-	}
-	return strings.Join(escaped, " ")
-}
-
-// ------------------------------
-// Terminal Detection (Linux)
-// ------------------------------
-func findLinuxTerminal() (string, []string) {
-	terms := []struct {
-		name string
-		args []string
-	}{
-		{"x-terminal-emulator", []string{"-e"}},
-		{"gnome-terminal", []string{"--", "bash", "-c"}},
-		{"konsole", []string{"-e"}},
-		{"xfce4-terminal", []string{"-e"}},
-		{"mate-terminal", []string{"-e"}},
-		{"lxterminal", []string{"-e"}},
-		{"alacritty", []string{"-e"}},
-		{"kitty", []string{"-e"}},
-		{"xterm", []string{"-e"}},
-	}
-
-	for _, t := range terms {
-		if path, err := exec.LookPath(t.name); err == nil {
-			return path, t.args
-		}
-	}
-	return "", nil
-}
-
-// ------------------------------
-// Build the rclone command to run
-// ------------------------------
-// Usage:
+// buildRcloneArgs converts cf-config-launcher arguments to a rclone command.
 //
 //	cf-config-launcher                  → rclone config
 //	cf-config-launcher reconnect NAME   → rclone config reconnect NAME:
@@ -77,63 +29,110 @@ func buildRcloneArgs() []string {
 	}
 }
 
-// ------------------------------
-// Main Launcher
-// ------------------------------
-func main() {
+// findLinuxTerminal returns (termPath, launchFunc) where launchFunc(cmdStr)
+// produces the full argument list to exec. Every terminal uses "bash -c CMD"
+// so that multi-word commands are passed correctly regardless of terminal.
+func findLinuxTerminal() (string, func(string) []string) {
+	type termDef struct {
+		name    string
+		mkArgs  func(cmdStr string) []string
+	}
 
-	// Check rclone exists
+	terms := []termDef{
+		// Each terminal opens bash -c "<cmd>; exec bash" so the window stays
+		// open and the user can read output / interact with prompts.
+		{"xfce4-terminal", func(c string) []string {
+			return []string{"-e", "bash -c " + shellQuote(c+"; exec bash")}
+		}},
+		{"xterm", func(c string) []string {
+			return []string{"-e", "bash", "-c", c + "; exec bash"}
+		}},
+		{"gnome-terminal", func(c string) []string {
+			return []string{"--", "bash", "-c", c + "; exec bash"}
+		}},
+		{"konsole", func(c string) []string {
+			return []string{"-e", "bash", "-c", c + "; exec bash"}
+		}},
+		{"mate-terminal", func(c string) []string {
+			return []string{"-e", "bash -c " + shellQuote(c+"; exec bash")}
+		}},
+		{"lxterminal", func(c string) []string {
+			return []string{"-e", "bash -c " + shellQuote(c+"; exec bash")}
+		}},
+		{"alacritty", func(c string) []string {
+			return []string{"-e", "bash", "-c", c + "; exec bash"}
+		}},
+		{"kitty", func(c string) []string {
+			return []string{"-e", "bash", "-c", c + "; exec bash"}
+		}},
+		{"x-terminal-emulator", func(c string) []string {
+			return []string{"-e", "bash", "-c", c + "; exec bash"}
+		}},
+	}
+
+	for _, t := range terms {
+		if path, err := exec.LookPath(t.name); err == nil {
+			name := t.name
+			mk := t.mkArgs
+			_ = name
+			return path, mk
+		}
+	}
+	return "", nil
+}
+
+// shellQuote wraps s in single quotes, escaping any single quotes inside.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// shellEscapeArgs joins args into a shell-safe command string.
+// Each argument is individually single-quoted so spaces and special
+// characters in remote names or paths are handled correctly.
+func shellEscapeArgs(args []string) string {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = shellQuote(a)
+	}
+	return strings.Join(quoted, " ")
+}
+
+func main() {
 	if _, err := exec.LookPath("rclone"); err != nil {
-		fmt.Println("❌ rclone not found in PATH")
+		fmt.Fprintln(os.Stderr, "❌ rclone not found in PATH")
 		os.Exit(1)
 	}
 
 	rcloneArgs := buildRcloneArgs()
-
-	// ✅ FIX 1: shell-escaped string — safe against injection
-	cmdStr := shellEscape(rcloneArgs)
+	cmdStr := shellEscapeArgs(rcloneArgs)
 
 	var cmd *exec.Cmd
 
 	switch runtime.GOOS {
 
-	// ---------------- LINUX ----------------
 	case "linux":
-		term, args := findLinuxTerminal()
-
-		if term != "" {
-			var cmdArgs []string
-			if isGnomeTerminal(term) {
-				cmdArgs = append(args, cmdStr+"; exec bash")
-			} else {
-				cmdArgs = append(args, rcloneArgs...)
-			}
-			cmd = exec.Command(term, cmdArgs...)
-			fmt.Printf("🚀 Launching via %s: %s\n", term, cmdStr)
+		termPath, mkArgs := findLinuxTerminal()
+		if termPath != "" {
+			termArgs := mkArgs(cmdStr)
+			cmd = exec.Command(termPath, termArgs...)
+			fmt.Printf("🚀 Launching via %s: %s\n", termPath, cmdStr)
 		} else {
-			fmt.Println("⚠ No terminal found, running directly...")
+			// No terminal found — run directly (PRoot / headless)
+			fmt.Fprintln(os.Stderr, "⚠ No terminal found, running directly...")
 			cmd = exec.Command(rcloneArgs[0], rcloneArgs[1:]...)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		}
 
-	// ---------------- macOS ----------------
 	case "darwin":
-		// ✅ FIX 2: AppleScript-safe quoting — escape \, " and $
-		safeCmd := cmdStr
-		safeCmd = strings.ReplaceAll(safeCmd, `\`, `\\`)
-		safeCmd = strings.ReplaceAll(safeCmd, `"`, `\"`)
-		safeCmd = strings.ReplaceAll(safeCmd, `$`, `\$`)
-
 		script := fmt.Sprintf(`tell application "Terminal"
-	do script "%s"
+	do script %s
 	activate
-end tell`, safeCmd)
+end tell`, shellQuote(cmdStr))
 		cmd = exec.Command("osascript", "-e", script)
 		fmt.Println("🚀 Opening Terminal.app...")
 
-	// ---------------- WINDOWS ----------------
 	case "windows":
 		if _, err := exec.LookPath("powershell"); err == nil {
 			cmd = exec.Command("powershell", "-NoExit", "-Command",
@@ -144,15 +143,13 @@ end tell`, safeCmd)
 			fmt.Println("🚀 Opening CMD...")
 		}
 
-	// ---------------- UNKNOWN ----------------
 	default:
-		fmt.Println("❌ Unsupported OS")
+		fmt.Fprintln(os.Stderr, "❌ Unsupported OS")
 		os.Exit(1)
 	}
 
-	err := cmd.Start()
-	if err != nil {
-		fmt.Println("❌ Failed to launch:", err)
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "❌ Failed to launch:", err)
 		os.Exit(1)
 	}
 
