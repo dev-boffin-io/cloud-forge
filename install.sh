@@ -132,6 +132,7 @@ _make_symlink() {
 # ─── Symlinks ────────────────────────────────────────────────────────────
 do_symlinks() {
     section "Installing symlinks"
+    _make_symlink "$GUI_BIN"   "cloud-forge"
     _make_symlink "$SFTP_BIN"  "rclone-sftp"
     _make_symlink "$ENGEN_BIN" "rclone-engine"
 }
@@ -139,7 +140,7 @@ do_symlinks() {
 # ─── Remove symlinks ─────────────────────────────────────────────────────
 remove_symlinks() {
     section "Removing symlinks"
-    for name in rclone-sftp rclone-engine; do
+    for name in cloud-forge rclone-sftp rclone-engine; do
         for dir in "${SYMLINK_DIRS[@]}"; do
             target="$dir/$name"
             if [ -L "$target" ] || [ -f "$target" ]; then
