@@ -7,6 +7,7 @@ rclone-engine
 
 # Built Go binaries
 bin/rclone-sftp
+bin/cf-config-launcher
 
 # Built lib binaries
 !/lib/

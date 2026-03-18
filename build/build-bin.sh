@@ -42,6 +42,7 @@ mkdir -p "$BIN_DIR"
 # correct way to build Go programs that have external dependencies.
 APPS=(
     "rclone-sftp:rclone-sftp"
+    "cf-config-launcher:cf-config-launcher"
 )
 
 # ==============================
