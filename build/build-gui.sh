@@ -188,12 +188,37 @@ fi
 mv "$DIST_BIN" "$TARGET_BIN"
 chmod +x "$TARGET_BIN"
 
-# ─── Check rclone-sftp ───────────────────────────────────────────────────
+# ─── Check required helper binaries ──────────────────────────────────────
+
+CONFIG_BIN="$BIN_DIR/cf-config-launcher"
+
+echo ""
+echo "Checking helper binaries..."
+
+# rclone-sftp
 if [ -f "$SFTP_BIN" ]; then
-    echo "rclone-sftp found at: $SFTP_BIN"
+    echo "✔ rclone-sftp found at: $SFTP_BIN"
 else
-    echo "WARNING: $SFTP_BIN not found."
-    echo "         cloud-forge will try PATH to find rclone-sftp."
+    echo "⚠ WARNING: rclone-sftp not found at: $SFTP_BIN"
+    echo "           Falling back to PATH..."
+    if command -v rclone-sftp >/dev/null 2>&1; then
+        echo "✔ rclone-sftp found in PATH"
+    else
+        echo "✖ ERROR: rclone-sftp not found anywhere."
+    fi
+fi
+
+# cf-config-launcher
+if [ -f "$CONFIG_BIN" ]; then
+    echo "✔ cf-config-launcher found at: $CONFIG_BIN"
+else
+    echo "⚠ WARNING: cf-config-launcher not found at: $CONFIG_BIN"
+    echo "           Falling back to PATH..."
+    if command -v cf-config-launcher >/dev/null 2>&1; then
+        echo "✔ cf-config-launcher found in PATH"
+    else
+        echo "✖ ERROR: cf-config-launcher not found anywhere."
+    fi
 fi
 
 # ─── Cleanup ─────────────────────────────────────────────────────────────
