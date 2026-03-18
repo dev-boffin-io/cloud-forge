@@ -645,6 +645,13 @@ class RemoteTab(BaseRunner):
         self.btn_delete.clicked.connect(self.delete_remote)
         tb1.addWidget(self.btn_delete)
 
+        self.btn_fix_drive = QPushButton("🔧  Fix Drive")
+        self.btn_fix_drive.setToolTip(
+            "Fix OneDrive: set drive_id and drive_type after OAuth sign-in"
+        )
+        self.btn_fix_drive.clicked.connect(self.fix_drive)
+        tb1.addWidget(self.btn_fix_drive)
+
         tb1.addStretch()
         root.addLayout(tb1)
 
@@ -800,17 +807,14 @@ class RemoteTab(BaseRunner):
             proc = subprocess.Popen(
                 auth_cmd,
                 stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
                 env=env,
                 start_new_session=True,
             )
-            # Brief pause so process stdin is ready before writing
             # Answer "y" to "Use web browser?" prompt
             try:
                 if proc.stdin:
                     import time
-                    time.sleep(0.2)
+                    time.sleep(0.3)
                     proc.stdin.write(b"y\n")
                     proc.stdin.flush()
                     proc.stdin.close()
@@ -895,6 +899,117 @@ class RemoteTab(BaseRunner):
             self.output.append_err(f"[ERROR] Invalid command syntax: {e}")
             return
         self._run(cmd)
+
+    def fix_drive(self):
+        """Fix OneDrive: get drive_id via Microsoft Graph API and update config."""
+        name = self._selected_remote()
+        if not name:
+            self.output.append_err("[ERROR] Please select a remote first")
+            return
+
+        row = self.table.currentRow()
+        type_item = self.table.item(row, 1)
+        rtype = type_item.text().strip() if type_item else ""
+        if rtype != "onedrive":
+            self.output.append_err(
+                f"[ERROR] '{name}' is type '{rtype}', not onedrive"
+            )
+            return
+
+        self.output.append_line(
+            f"[INFO] Reading token for '{name}'...", DARK['warning']
+        )
+
+        # Read access_token from config
+        try:
+            result = subprocess.run(
+                [self.rclone, "config", "dump"],
+                capture_output=True, text=True, timeout=10
+            )
+            cfg = json.loads(result.stdout) if result.returncode == 0 else {}
+            remote_cfg = cfg.get(name, {})
+            token_str = remote_cfg.get("token", "{}")
+            token_data = json.loads(token_str)
+            access_token = token_data.get("access_token", "")
+        except Exception as e:
+            self.output.append_err(f"[ERROR] Could not read token: {e}")
+            return
+
+        if not access_token:
+            self.output.append_err(
+                "[ERROR] No access token found — make sure OAuth sign-in completed."
+            )
+            return
+
+        self.output.append_line(
+            "[INFO] Querying Microsoft Graph for drive info...", DARK['warning']
+        )
+
+        worker = CmdWorker([
+            "python3", "-c",
+            f"""import urllib.request, json, sys
+req = urllib.request.Request(
+    "https://graph.microsoft.com/v1.0/me/drive",
+    headers={{"Authorization": "Bearer {access_token}"}}
+)
+try:
+    with urllib.request.urlopen(req, timeout=15) as r:
+        print(r.read().decode())
+except Exception as e:
+    print(json.dumps({{"error": str(e)}}))
+"""
+        ], timeout=20, registry=self._workers)
+        worker.done.connect(
+            lambda out, ok, n=name: self._on_graph_drive_result(out, ok, n)
+        )
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _on_graph_drive_result(self, out, ok, name):
+        try:
+            data = json.loads(out)
+        except Exception:
+            self.output.append_err(f"[ERROR] Unexpected response:\n{out[:200]}")
+            return
+
+        if "error" in data:
+            err = data.get("error", {})
+            msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            self.output.append_err(f"[ERROR] Graph API: {msg}")
+            return
+
+        drive_id   = data.get("id", "")
+        drive_type = data.get("driveType", "personal")
+
+        if not drive_id:
+            self.output.append_err("[ERROR] drive_id not found in Graph response.")
+            return
+
+        update_cmd = [
+            self.rclone, "config", "update", name,
+            "drive_id",   drive_id,
+            "drive_type", drive_type,
+            "--non-interactive",
+        ]
+        self.output.append_cmd(" ".join(update_cmd))
+        worker = CmdWorker(update_cmd, timeout=30, registry=self._workers)
+        worker.done.connect(
+            lambda out2, ok2, n=name, dt=drive_type, di=drive_id:
+                self._on_fix_drive_done(out2, ok2, n, dt, di)
+        )
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _on_fix_drive_done(self, out, ok, name, drive_type, drive_id):
+        if ok:
+            self.output.append_ok(
+                f"[OK] '{name}' configured:\n"
+                f"     drive_type = {drive_type}\n"
+                f"     drive_id   = {drive_id[:20]}..."
+            )
+            QTimer.singleShot(500, self.refresh_remotes)
+        else:
+            self.output.append_err(out or "[ERROR] Failed to update config.")
 
     def get_remote_names(self):
         names = []
